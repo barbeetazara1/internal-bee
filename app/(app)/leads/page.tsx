@@ -5,7 +5,7 @@ import { Alert, CreateButton, PageHeader, StatusBadge, SummaryCards } from "@/co
 import DataTable, { type Col, type Row } from "@/components/DataTable";
 import LeadKanban from "@/components/LeadKanban";
 import ViewToggle from "@/components/ViewToggle";
-import { LEAD_LABEL, LEAD_STATUSES } from "@/lib/constants";
+import { LEAD_LABEL, LEAD_STATUSES, licenseTypeOf } from "@/lib/constants";
 import { fmtDate, idr } from "@/lib/format";
 import { bulkDeleteLeads } from "@/app/actions/leads";
 
@@ -17,7 +17,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   const leads = await prisma.lead.findMany({ relationLoadStrategy: "join",
     where: view === "list" && sp.status ? { status: sp.status } : undefined,
     orderBy: { created_at: "desc" },
-    include: { owner: true, client: true, products: true },
+    include: { owner: true, client: true, products: { include: { product: { select: { code: true, name: true } } } } },
   });
 
   const columns: Col[] = [
@@ -72,6 +72,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           leads={leads.map((l) => ({
             id: l.id, title: l.title, client: l.client.name, contact: l.contact_name, owner: l.owner.name, status: l.status,
             value: l.products.reduce((a, p) => a + Number(p.price) * p.quantity, 0), products: l.products.length, created: fmtDate(l.created_at),
+            lines: l.products.map((p) => ({ id: p.id, label: `${p.product.code} — ${p.product.name}`, price: Number(p.price), license_type: licenseTypeOf(p.license_months) })),
           }))}
         />
       ) : (

@@ -274,6 +274,10 @@ export const DICT: Entry[] = [
   ["· {1} dilewati (masih berjalan)", "· {1} skipped (still running)"],
 
   // ── Lead
+  ["Lead yang sudah ditutup tidak bisa dipindahkan", "A closed lead can't be moved"],
+  ["Status hanya bisa maju, tidak bisa dikembalikan ke tahap sebelumnya", "Status can only move forward and can't be reverted to a previous stage"],
+  ["Closed Won hanya bisa dari tahap Negosiasi", "Closed Won is only possible from the Negotiation stage"],
+  ["Tambahkan minimal 1 produk di lead ini (dan Save) sebelum pindah ke tahap ini", "Add at least 1 product to this lead (and Save) before moving to this stage"],
   ["Buat Invoice", "Generate Invoice"],
   ["Buat Quotation", "Generate Quotation"],
   ["Pindah ke {1}?", "Move to {1}?"],

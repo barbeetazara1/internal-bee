@@ -38,12 +38,17 @@ function planOf(kind: PaymentKind, prev: PaymentPlan): PaymentPlan {
  * sama rata), One-time (penuh / DP), Bulanan (per bulan sebanyak x bulan).
  */
 export default function PaymentDialog({
-  leadId, lines, action, trigger, triggerClassName, title, intro, confirmLabel,
+  leadId, lines, action, trigger, triggerClassName, title, intro, confirmLabel, open: controlledOpen, onClose,
 }: {
   leadId: string; lines: PayLine[]; action: (fd: FormData) => void | Promise<void>;
-  trigger: string; triggerClassName: string; title: string; intro: string; confirmLabel: string;
+  trigger?: string; triggerClassName?: string; title: string; intro: string; confirmLabel: string;
+  /** Mode terkendali: modal dibuka/ditutup oleh pemanggil (tanpa tombol pemicu). */
+  open?: boolean; onClose?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const controlled = controlledOpen !== undefined;
+  const [innerOpen, setInnerOpen] = useState(false);
+  const open = controlled ? controlledOpen : innerOpen;
+  const setOpen = (v: boolean) => (controlled ? !v && onClose?.() : setInnerOpen(v));
   const [busy, setBusy] = useState(false);
   const [plans, setPlans] = useState<Record<string, PaymentPlan>>(() => Object.fromEntries(lines.map((l) => [l.id, { ...defaultPlan(l.license_type), first_due: todayStr() }])));
   const start = new Date();
@@ -140,7 +145,7 @@ export default function PaymentDialog({
 
   return (
     <>
-      <button type="button" className={triggerClassName} onClick={() => setOpen(true)}>{trigger}</button>
+      {!controlled && <button type="button" className={triggerClassName} onClick={() => setOpen(true)}>{trigger}</button>}
       {modal && createPortal(modal, document.body)}
     </>
   );
