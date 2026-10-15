@@ -14,7 +14,7 @@ import { createTask } from "@/app/actions/projects";
 export default async function NewTask({ params }: { params: Promise<{ id: string }> }) {
   await requireRole("SUPER_ADMIN", "PROJECT");
   const { id } = await params;
-  const project = await prisma.project.findUnique({ where: { id }, include: { tasks: { orderBy: { start_date: "asc" }, select: { id: true, title: true } } } });
+  const project = await prisma.project.findUnique({ relationLoadStrategy: "join", where: { id }, include: { tasks: { orderBy: { start_date: "asc" }, select: { id: true, title: true } } } });
   if (!project) notFound();
   const users = await prisma.user.findMany({ where: { is_active: true, role: { in: ["SUPER_ADMIN", "PROJECT"] } }, select: { id: true, name: true }, orderBy: { name: "asc" } });
   const today = toInputDate(new Date());

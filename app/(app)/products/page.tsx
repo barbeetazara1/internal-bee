@@ -9,7 +9,7 @@ import { deleteProducts, setProductsActive } from "@/app/actions/products";
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const user = await requireUser();
   const sp = await searchParams;
-  const products = await prisma.product.findMany({ orderBy: { code: "asc" }, include: { _count: { select: { apiKeys: true } } } });
+  const products = await prisma.product.findMany({ relationLoadStrategy: "join", orderBy: { code: "asc" }, include: { _count: { select: { apiKeys: true } } } });
   const editable = can.manageProducts(user.role);
 
   const columns: Col[] = [

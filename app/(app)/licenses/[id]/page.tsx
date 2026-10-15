@@ -25,10 +25,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export default async function LicenseDetail({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await params;
-  const k = await prisma.apiKey.findUnique({ where: { id }, include: { client: true, product: true, project: true, demo: true } });
+  const k = await prisma.apiKey.findUnique({ relationLoadStrategy: "join", where: { id }, include: { client: true, product: true, project: true, demo: true } });
   if (!k) notFound();
 
-  const siblings = await prisma.apiKey.findMany({ where: { client_id: k.client_id, id: { not: k.id } }, include: { product: true }, orderBy: { created_at: "asc" } });
+  const siblings = await prisma.apiKey.findMany({ relationLoadStrategy: "join", where: { client_id: k.client_id, id: { not: k.id } }, include: { product: true }, orderBy: { created_at: "asc" } });
   const st = effectiveStatus(k);
   const manage = can.manageLicense(user.role);
   const title = `${k.client.name} — ${k.product.name}`;

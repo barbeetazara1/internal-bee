@@ -20,7 +20,7 @@ export default async function DemoDetail({ params, searchParams }: { params: Pro
   const user = await requireUser();
   const { id } = await params;
   const sp = await searchParams;
-  const d = await prisma.demo.findUnique({ where: { id }, include: { client: true, product: true, apiKeys: true } });
+  const d = await prisma.demo.findUnique({ relationLoadStrategy: "join", where: { id }, include: { client: true, product: true, apiKeys: true } });
   if (!d) notFound();
   const [clients, products] = await Promise.all([
     prisma.client.findMany({ orderBy: { name: "asc" } }),

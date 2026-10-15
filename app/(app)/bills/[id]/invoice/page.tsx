@@ -12,7 +12,7 @@ export default async function BillInvoice({ params, searchParams }: { params: Pr
   await requireRole("SUPER_ADMIN", "SALES");
   const { id } = await params;
   const { project: fromProject } = await searchParams;
-  const b = await prisma.bill.findUnique({ where: { id }, include: { client: true, lead: { include: { owner: true } }, product: true, project: true } });
+  const b = await prisma.bill.findUnique({ relationLoadStrategy: "join", where: { id }, include: { client: true, lead: { include: { owner: true } }, product: true, project: true } });
   if (!b) notFound();
   const st = effectiveBillStatus(b);
   const docNo = `INV-${b.code.replace("BILL-", "")}`;

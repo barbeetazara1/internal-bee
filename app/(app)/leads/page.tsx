@@ -14,7 +14,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   // Default Kanban; List hanya jika dipilih lewat toggle (?view=list).
   const view: "list" | "kanban" = sp.view === "list" ? "list" : "kanban";
-  const leads = await prisma.lead.findMany({
+  const leads = await prisma.lead.findMany({ relationLoadStrategy: "join",
     where: view === "list" && sp.status ? { status: sp.status } : undefined,
     orderBy: { created_at: "desc" },
     include: { owner: true, client: true, products: true },

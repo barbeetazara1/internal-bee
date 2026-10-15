@@ -7,7 +7,7 @@ import { recordLink, type RecordType } from "@/lib/activity";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  const rows = await prisma.notification.findMany({
+  const rows = await prisma.notification.findMany({ relationLoadStrategy: "join",
     where: { user_id: user.id },
     orderBy: { created_at: "desc" },
     take: 20,

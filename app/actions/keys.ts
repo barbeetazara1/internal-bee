@@ -26,7 +26,7 @@ export async function consumeKeyFlash(): Promise<RevealedKey[]> {
 
 async function load(fd: FormData) {
   const id = String(fd.get("id"));
-  const key = await prisma.apiKey.findUnique({ where: { id }, include: { product: true, client: true } });
+  const key = await prisma.apiKey.findUnique({ relationLoadStrategy: "join", where: { id }, include: { product: true, client: true } });
   if (!key) throw new Error("Key tidak ditemukan");
   return key;
 }

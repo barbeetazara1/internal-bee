@@ -38,7 +38,7 @@ export async function createTask(fd: FormData): Promise<ActionResult> {
 export async function saveTask(fd: FormData): Promise<ActionResult> {
   const user = await requireRole("SUPER_ADMIN", "PROJECT");
   const id = str(fd, "id");
-  const cur = await prisma.task.findUnique({ where: { id }, include: { assignee: true, depends_on: true } });
+  const cur = await prisma.task.findUnique({ relationLoadStrategy: "join", where: { id }, include: { assignee: true, depends_on: true } });
   if (!cur) return { ok: false, message: "Task not found" };
 
   const title = str(fd, "title");

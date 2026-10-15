@@ -9,7 +9,7 @@ const STATUS_LABEL: Record<string, string> = { ACTIVE: "ACTIVE", ON_HOLD: "ON HO
 
 export default async function ProjectsPage() {
   const user = await requireUser();
-  const projects = await prisma.project.findMany({ orderBy: { created_at: "desc" }, include: { client: true, tasks: { select: { status: true, due_date: true } } } });
+  const projects = await prisma.project.findMany({ relationLoadStrategy: "join", orderBy: { created_at: "desc" }, include: { client: true, tasks: { select: { status: true, due_date: true } } } });
 
   const columns: Col[] = [
     { key: "project", label: "Project" },

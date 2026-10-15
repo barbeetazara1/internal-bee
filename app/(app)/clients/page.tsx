@@ -8,7 +8,7 @@ import { effectiveStatus } from "@/lib/keys";
 
 export default async function ClientsPage() {
   const user = await requireUser();
-  const clients = await prisma.client.findMany({ orderBy: { created_at: "desc" }, include: { apiKeys: { where: { kind: "PRODUCTION" } }, projects: true, leads: true } });
+  const clients = await prisma.client.findMany({ relationLoadStrategy: "join", orderBy: { created_at: "desc" }, include: { apiKeys: { where: { kind: "PRODUCTION" } }, projects: true, leads: true } });
 
   const columns: Col[] = [
     { key: "client", label: "Client" },

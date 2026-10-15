@@ -25,7 +25,7 @@ export default async function LeadDetail({ params, searchParams }: { params: Pro
   await requireRole("SUPER_ADMIN", "SALES");
   const { id } = await params;
   const sp = await searchParams;
-  const lead = await prisma.lead.findUnique({
+  const lead = await prisma.lead.findUnique({ relationLoadStrategy: "join",
     where: { id },
     include: { owner: true, products: { include: { product: true }, orderBy: { product: { code: "asc" } } }, client: true, project: true, _count: { select: { bills: true } } },
   });

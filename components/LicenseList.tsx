@@ -11,7 +11,7 @@ import { deleteLicenses } from "@/app/actions/keys";
 export default async function LicenseList({ kind }: { kind: "PRODUCTION" | "DEMO" }) {
   const user = await requireUser();
   const demo = kind === "DEMO";
-  const keys = await prisma.apiKey.findMany({ where: { kind }, orderBy: [{ client: { name: "asc" } }, { created_at: "asc" }], include: { client: true, product: true, demo: true } });
+  const keys = await prisma.apiKey.findMany({ relationLoadStrategy: "join", where: { kind }, orderBy: [{ client: { name: "asc" } }, { created_at: "asc" }], include: { client: true, product: true, demo: true } });
 
   const columns: Col[] = [
     { key: "client", label: "Client", hidden: true }, // dipakai sebagai group-by

@@ -1,7 +1,7 @@
 import { DICT, TO_ID_ONLY } from "./i18n-dict";
 import type { Lang } from "./lang";
 
-type Rule = { re: RegExp; out: string; weight: number };
+type Rule = { re: RegExp; out: string; weight: number; lit: string };
 const exact: Record<Lang, Map<string, string>> = { id: new Map(), en: new Map() };
 const rules: Record<Lang, Rule[]> = { id: [], en: [] };
 
@@ -16,7 +16,8 @@ function register(lang: Lang, src: string, out: string) {
   const re = new RegExp("^" + parts.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("(.*?)") + "$", "s");
   const order = [...src.matchAll(/\{(\d)\}/g)].map((m) => Number(m[1]));
   // Urutan slot pada pola sumber → nomor slot pada keluaran
-  rules[lang].push({ re, out: out.replace(/\{(\d)\}/g, (_, n) => `\u0000${order.indexOf(Number(n)) + 1}\u0000`), weight: parts.join("").length });
+  const lit = parts.reduce((a, b) => (b.length > a.length ? b : a), ""); // potongan teks tetap terpanjang: prasaring murah sebelum regex
+  rules[lang].push({ lit, re, out: out.replace(/\{(\d)\}/g, (_, n) => `\u0000${order.indexOf(Number(n)) + 1}\u0000`), weight: parts.join("").length });
 }
 
 for (const [id, en, ...alias] of DICT) {
@@ -40,6 +41,7 @@ function core(text: string, lang: Lang, depth: number): string {
   if (hit !== undefined) return hit;
   if (depth < 3) {
     for (const r of rules[lang]) {
+      if (r.lit && !text.includes(r.lit)) continue;
       const m = text.match(r.re);
       if (!m) continue;
       return r.out.replace(/\u0000(\d)\u0000/g, (_, n) => {
@@ -52,9 +54,17 @@ function core(text: string, lang: Lang, depth: number): string {
   return text.replace(re, (_, d, mo, y) => `${d} ${map[mo]} ${y}`);
 }
 
-/** Terjemahkan satu potong teks (spasi di tepi dipertahankan). */
+const memo: Record<Lang, Map<string, string>> = { id: new Map(), en: new Map() };
+const HAS_LETTER = /[A-Za-z]/;
+
+/** Terjemahkan satu potong teks (spasi di tepi dipertahankan). Hasilnya di-cache: teks yang sama (header tabel, label) tidak diproses ulang. */
 export function tr(text: string, lang: Lang, depth = 0): string {
+  if (text.length < 2 || !HAS_LETTER.test(text)) return text;
+  const cached = memo[lang].get(text);
+  if (cached !== undefined) return cached;
   const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(text);
-  if (!m || !m[2]) return text;
-  return m[1] + core(m[2].replace(/\s+/g, " "), lang, depth) + m[3];
+  const out = !m || !m[2] ? text : m[1] + core(m[2].replace(/\s+/g, " "), lang, depth) + m[3];
+  if (memo[lang].size > 8000) memo[lang].clear();
+  memo[lang].set(text, out);
+  return out;
 }

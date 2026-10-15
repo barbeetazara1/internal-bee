@@ -13,7 +13,7 @@ import { effectiveStatus } from "@/lib/keys";
 export default async function ClientDetail({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await params;
-  const client = await prisma.client.findUnique({
+  const client = await prisma.client.findUnique({ relationLoadStrategy: "join",
     where: { id },
     include: {
       leads: { orderBy: { created_at: "desc" } },

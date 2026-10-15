@@ -38,7 +38,7 @@ export async function saveDemo(fd: FormData): Promise<ActionResult> {
   };
 
   if (id) {
-    const cur = await prisma.demo.findUnique({ where: { id }, include: { client: true, product: true } });
+    const cur = await prisma.demo.findUnique({ relationLoadStrategy: "join", where: { id }, include: { client: true, product: true } });
     if (!cur) return { ok: false, message: "Demo not found" };
     if (cur.status !== "REQUESTED") return { ok: false, message: "Only demo requests that haven't started can be edited" };
     const changes = diffFields({ contact_name: "Contact", email: "Email", phone: "Phone", demo_days: "Demo length (days)", notes: "Notes" }, cur, data);
@@ -64,7 +64,7 @@ export async function saveDemo(fd: FormData): Promise<ActionResult> {
 export async function startDemo(fd: FormData) {
   const user = await requireRole(...ROLES);
   const id = str(fd, "id");
-  const demo = await prisma.demo.findUnique({ where: { id }, include: { client: true, product: true } });
+  const demo = await prisma.demo.findUnique({ relationLoadStrategy: "join", where: { id }, include: { client: true, product: true } });
   if (!demo) redirect("/demo");
   if (demo.status !== "REQUESTED") redirect(`/demo/${id}?error=` + encodeURIComponent("This demo has already been started or closed"));
 
@@ -90,7 +90,7 @@ export async function startDemo(fd: FormData) {
     await logActivity(tx, { type: "demo", id, kind: "EVENT", authorId: user.id, label: `${demo.code} — ${demo.client.name}`, body: `Demo started — demo license key generated, valid until ${ends.toISOString().slice(0, 10)}` });
     await logActivity(tx, { type: "license", id: created.id, kind: "CREATED", authorId: user.id, label: `${demo.client.name} — ${demo.product.name} (Demo)`, body: `Demo license generated from ${demo.code} (SANDBOX, ${demo.demo_days} days)` });
     return created;
-  });
+  }, { maxWait: 15000, timeout: 60000 });
   await setKeyFlash([{ product: `${demo.product.code} — ${demo.product.name} (Demo)`, environment: "SANDBOX", key: k.plain }]);
   revalidatePath("/demo");
   revalidatePath(`/demo/${id}`);
@@ -101,13 +101,13 @@ export async function startDemo(fd: FormData) {
 export async function endDemo(fd: FormData) {
   const user = await requireRole(...ROLES);
   const id = str(fd, "id");
-  const demo = await prisma.demo.findUnique({ where: { id }, include: { client: true } });
+  const demo = await prisma.demo.findUnique({ relationLoadStrategy: "join", where: { id }, include: { client: true } });
   if (!demo || demo.status !== "ACTIVE") redirect(`/demo/${id}`);
   await prisma.$transaction(async (tx) => {
     await tx.apiKey.updateMany({ where: { demo_id: id, status: { not: "REVOKED" } }, data: { status: "REVOKED", revoked_at: new Date() } });
     await tx.demo.update({ where: { id }, data: { status: "ENDED" } });
     await logActivity(tx, { type: "demo", id, kind: "EVENT", authorId: user.id, label: `${demo.code} — ${demo.client.name}`, body: "Demo ended — demo license key revoked" });
-  });
+  }, { maxWait: 15000, timeout: 60000 });
   revalidatePath("/demo");
   revalidatePath(`/demo/${id}`);
   revalidatePath("/licenses/demo");
@@ -117,7 +117,7 @@ export async function endDemo(fd: FormData) {
 export async function cancelDemo(fd: FormData) {
   const user = await requireRole(...ROLES);
   const id = str(fd, "id");
-  const demo = await prisma.demo.findUnique({ where: { id }, include: { client: true } });
+  const demo = await prisma.demo.findUnique({ relationLoadStrategy: "join", where: { id }, include: { client: true } });
   if (!demo || demo.status !== "REQUESTED") redirect(`/demo/${id}`);
   await prisma.demo.update({ where: { id }, data: { status: "CANCELLED" } });
   await logActivity(prisma, { type: "demo", id, kind: "EVENT", authorId: user.id, label: `${demo.code} — ${demo.client.name}`, body: "Demo request cancelled" });

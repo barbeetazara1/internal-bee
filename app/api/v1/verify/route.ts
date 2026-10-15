@@ -16,7 +16,7 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ valid: false, error: "missing_or_malformed_key" }, { status: 401 });
   }
 
-  const key = await prisma.apiKey.findUnique({ where: { key_hash: hashKey(raw) }, include: { product: true, client: true } });
+  const key = await prisma.apiKey.findUnique({ relationLoadStrategy: "join", where: { key_hash: hashKey(raw) }, include: { product: true, client: true } });
   if (!key) return NextResponse.json({ valid: false, error: "invalid_key" }, { status: 401 });
 
   const log = (status: number) => prisma.usageLog.create({ data: { api_key_id: key.id, endpoint, status_code: status } });

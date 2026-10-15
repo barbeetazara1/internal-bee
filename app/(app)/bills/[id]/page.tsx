@@ -32,7 +32,7 @@ export default async function BillDetail({ params, searchParams }: { params: Pro
   const user = await requireRole("SUPER_ADMIN", "SALES");
   const { id } = await params;
   const { project: fromProject } = await searchParams;
-  const b = await prisma.bill.findUnique({ where: { id }, include: { client: true, lead: true, project: true, product: true, api_key: true } });
+  const b = await prisma.bill.findUnique({ relationLoadStrategy: "join", where: { id }, include: { client: true, lead: true, project: true, product: true, api_key: true } });
   if (!b) notFound();
   const canEdit = can.manageBills(user.role);
   const st = effectiveBillStatus(b);

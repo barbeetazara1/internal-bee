@@ -1,5 +1,5 @@
+import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
-import { logActivity } from "./activity";
 import { paymentSchedule, validatePlan, type PaymentPlan } from "./payment";
 import { licenseTypeOf } from "./constants";
 
@@ -31,17 +31,19 @@ export async function createBillsForLead(
 ) {
   const rows = a.lines.flatMap((l, i) => paymentSchedule(a.plans[l.id], Number(l.price), a.start).map((s) => ({ l, license: a.licenseIds[i] ?? null, s })));
   const codes = await nextCodes(tx, rows.length);
-  for (const [i, { l, license, s }] of rows.entries()) {
-    const bill = await tx.bill.create({
-      data: {
-        code: codes[i], client_id: a.clientId, lead_id: a.leadId, project_id: a.projectId, api_key_id: license, product_id: l.product_id,
-        kind: s.kind, period_no: s.no, period_total: s.of, period_start: s.from, period_end: s.to, amount: s.amount, due_date: s.due,
-      },
-    });
-    await logActivity(tx, {
-      type: "bill", id: bill.id, kind: "CREATED", authorId: a.authorId, label: bill.code,
+  // Dimasukkan sekaligus (createMany) agar tidak puluhan query berurutan dalam satu transaksi.
+  const ids = rows.map(() => randomUUID());
+  await tx.bill.createMany({
+    data: rows.map(({ l, license, s }, i) => ({
+      id: ids[i], code: codes[i], client_id: a.clientId, lead_id: a.leadId, project_id: a.projectId, api_key_id: license, product_id: l.product_id,
+      kind: s.kind, period_no: s.no, period_total: s.of, period_start: s.from, period_end: s.to, amount: s.amount, due_date: s.due,
+    })),
+  });
+  await tx.activity.createMany({
+    data: rows.map(({ l, s }, i) => ({
+      record_type: "bill", record_id: ids[i], kind: "CREATED", author_id: a.authorId, record_label: codes[i],
       body: `Generated automatically when lead "${a.leadTitle}" was closed as Won (${l.product.code}, ${s.kind === "DP" ? "down payment" : s.kind === "FULL" ? "full payment" : `payment ${s.no}/${s.of}`})`,
-    });
-  }
+    })),
+  });
   return rows.length;
 }

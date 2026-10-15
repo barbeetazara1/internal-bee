@@ -17,14 +17,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     prisma.lead.count({ where: { status: "CLOSED_WON", closed_at: { gte: monthStart } } }),
     prisma.client.count(),
     prisma.apiKey.count({ where: { kind: "PRODUCTION", status: "ACTIVE", OR: [{ expires_at: null }, { expires_at: { gt: now } }] } }),
-    prisma.apiKey.findMany({
+    prisma.apiKey.findMany({ relationLoadStrategy: "join",
       where: { kind: "PRODUCTION", status: "ACTIVE", expires_at: { gt: now, lte: in30 } },
       include: { client: true, product: true },
       orderBy: { expires_at: "asc" },
       take: 5,
     }),
     prisma.task.count({ where: { status: { not: "DONE" } } }),
-    prisma.lead.findMany({ orderBy: { created_at: "desc" }, take: 5, include: { owner: true, client: true } }),
+    prisma.lead.findMany({ relationLoadStrategy: "join", orderBy: { created_at: "desc" }, take: 5, include: { owner: true, client: true } }),
     user.role === "SUPER_ADMIN" ? prisma.leadProduct.findMany({ where: { lead: { status: "CLOSED_WON" } } }) : Promise.resolve([]),
   ]);
   const counts = Object.fromEntries(leadGroups.map((g) => [g.status, g._count]));

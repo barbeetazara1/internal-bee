@@ -86,7 +86,7 @@ const describe = (price: number, m: number, env: string) => `${idr(price)} · ${
 export async function updateLead(fd: FormData): Promise<ActionResult> {
   const user = await requireRole("SUPER_ADMIN", "SALES");
   const id = str(fd, "id");
-  const cur = await prisma.lead.findUnique({ where: { id }, include: { client: true, products: { include: { product: true } } } });
+  const cur = await prisma.lead.findUnique({ relationLoadStrategy: "join", where: { id }, include: { client: true, products: { include: { product: true } } } });
   if (!cur) return { ok: false, message: "Lead not found" };
   // Detail lead terkunci setelah status lewat "Baru": field yang terkirim diabaikan, hanya baris produk yang boleh berubah.
   const detailLocked = leadDetailLocked(cur.status);
@@ -150,7 +150,7 @@ export async function updateLead(fd: FormData): Promise<ActionResult> {
     }
     for (const op of ops) if (op.kind === "create") await tx.leadProduct.create({ data: { lead_id: id, ...op.line! } });
     await logActivity(tx, { type: "lead", id, kind: "UPDATED", authorId: user.id, label: data.title, changes });
-  });
+  }, { maxWait: 15000, timeout: 60000 });
   revalidatePath(`/leads/${id}`);
   revalidatePath("/leads");
   return { ok: true, changed: true, message: "Data saved" };
@@ -188,7 +188,7 @@ export async function setLeadPayment(fd: FormData) {
   const user = await requireRole("SUPER_ADMIN", "SALES");
   const id = str(fd, "id");
   try {
-    const lead = await prisma.lead.findUnique({ where: { id }, include: { project: { include: { apiKeys: true } }, products: { include: { product: true } }, _count: { select: { bills: true } } } });
+    const lead = await prisma.lead.findUnique({ relationLoadStrategy: "join", where: { id }, include: { project: { include: { apiKeys: true } }, products: { include: { product: true } }, _count: { select: { bills: true } } } });
     if (!lead || lead.status !== "CLOSED_WON") throw new Error("Only a Closed Won lead can get a payment system");
     if (lead._count.bills > 0) throw new Error("This lead already has bills");
     const plans = parsePlans(fd);
@@ -198,6 +198,7 @@ export async function setLeadPayment(fd: FormData) {
         leadId: lead.id, leadTitle: lead.title, clientId: lead.client_id, projectId: lead.project?.id ?? null, lines: lead.products, plans,
         licenseIds: lead.products.map((lp) => lead.project?.apiKeys.find((k) => k.product_id === lp.product_id)?.id ?? null), start: new Date(), authorId: user.id,
       }),
+      { maxWait: 15000, timeout: 60000 },
     );
     await logActivity(prisma, { type: "lead", id, kind: "EVENT", authorId: user.id, label: lead.title, body: "Payment system set — bills were created" });
   } catch (e) {

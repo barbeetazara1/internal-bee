@@ -17,7 +17,7 @@ import { changeTaskStatus, deleteTask, saveTask } from "@/app/actions/projects";
 export default async function TaskDetail({ params }: { params: Promise<{ id: string; taskId: string }> }) {
   const user = await requireUser();
   const { id, taskId } = await params;
-  const task = await prisma.task.findUnique({ where: { id: taskId }, include: { project: true } });
+  const task = await prisma.task.findUnique({ relationLoadStrategy: "join", where: { id: taskId }, include: { project: true } });
   if (!task || task.project_id !== id) notFound();
   const [others, users] = await Promise.all([
     prisma.task.findMany({ where: { project_id: id, id: { not: taskId } }, orderBy: { start_date: "asc" }, select: { id: true, title: true } }),

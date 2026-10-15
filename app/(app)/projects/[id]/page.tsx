@@ -20,7 +20,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const user = await requireUser();
   const { id } = await params;
   const { view = "board" } = await searchParams;
-  const project = await prisma.project.findUnique({
+  const project = await prisma.project.findUnique({ relationLoadStrategy: "join",
     where: { id },
     include: { client: true, tasks: { orderBy: [{ start_date: "asc" }, { position: "asc" }] }, apiKeys: true },
   });

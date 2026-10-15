@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -57,6 +58,10 @@ model Lead {
   products     LeadProduct[]
   project      Project?
   bills        Bill[]
+
+  @@index([client_id])
+  @@index([owner_id])
+  @@index([status, created_at])
 }
 
 model LeadProduct {
@@ -71,6 +76,8 @@ model LeadProduct {
   product        Product @relation(fields: [product_id], references: [id])
 
   @@unique([lead_id, product_id])
+
+  @@index([product_id])
 }
 
 model Client {
@@ -110,6 +117,8 @@ model Project {
   tasks      Task[]
   apiKeys    ApiKey[]
   bills      Bill[]
+
+  @@index([client_id])
 }
 
 model Task {
@@ -129,6 +138,10 @@ model Task {
   assignee      User?    @relation(fields: [assignee_id], references: [id])
   depends_on    Task?    @relation("TaskDeps", fields: [depends_on_id], references: [id], onDelete: SetNull)
   dependents    Task[]   @relation("TaskDeps")
+
+  @@index([project_id, start_date])
+  @@index([depends_on_id])
+  @@index([assignee_id])
 }
 
 model ApiKey {
@@ -155,6 +168,12 @@ model ApiKey {
   demo         Demo?      @relation(fields: [demo_id], references: [id])
   usage        UsageLog[]
   bills        Bill[]
+
+  @@index([client_id])
+  @@index([project_id])
+  @@index([product_id])
+  @@index([demo_id])
+  @@index([kind, status])
 }
 
 model UsageLog {
@@ -218,6 +237,9 @@ model Demo {
   product      Product   @relation(fields: [product_id], references: [id])
   owner        User      @relation(fields: [owner_id], references: [id])
   apiKeys      ApiKey[]
+
+  @@index([client_id])
+  @@index([status])
 }
 
 /// Tagihan: terbentuk saat lead Closed Won sesuai sistem pembayaran (bayar penuh / DP / cicilan / per bulan) yang dipilih user.
@@ -251,4 +273,10 @@ model Bill {
   product      Product   @relation(fields: [product_id], references: [id])
 
   @@index([status, due_date])
+
+  @@index([project_id])
+  @@index([client_id])
+  @@index([lead_id])
+  @@index([api_key_id])
+  @@index([product_id])
 }

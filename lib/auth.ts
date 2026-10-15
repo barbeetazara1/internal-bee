@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
@@ -19,7 +20,8 @@ export async function destroySession() {
   (await cookies()).delete(SESSION_COOKIE);
 }
 
-export async function getUser() {
+/** Di-cache per request: layout, halaman, dan Chatter memanggil requireUser() berkali-kali, tapi query user cukup sekali. */
+export const getUser = cache(async function getUser() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   try {
@@ -29,7 +31,7 @@ export async function getUser() {
   } catch {
     return null;
   }
-}
+});
 
 export async function requireUser() {
   const user = await getUser();

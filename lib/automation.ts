@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { addDays, addMonths } from "./format";
 import { generateKey, type Env } from "./keys";
@@ -21,7 +23,7 @@ const TASK_TEMPLATE = [
  *  4. membuat Bills sesuai sistem pembayaran yang dipilih user per produk.
  */
 export async function closeLeadAsWon(leadId: string, userId: string, plans: Record<string, PaymentPlan>) {
-  const lead = await prisma.lead.findUnique({ where: { id: leadId }, include: { client: true, products: { include: { product: true } } } });
+  const lead = await prisma.lead.findUnique({ relationLoadStrategy: "join", where: { id: leadId }, include: { client: true, products: { include: { product: true } } } });
   if (!lead) throw new Error("Lead tidak ditemukan");
   if (lead.status === "CLOSED_WON") throw new Error("Lead sudah Closed Won");
   if (lead.status === "CLOSED_LOST") throw new Error("Lead yang sudah Closed Lost tidak bisa dibuka kembali");
@@ -50,55 +52,52 @@ export async function closeLeadAsWon(leadId: string, userId: string, plans: Reco
       },
     });
 
-    const kickoff = await tx.task.create({
-      data: { project_id: project.id, title: "Kickoff Meeting", status: "TODO", priority: "HIGH", start_date: now, due_date: addDays(now, 2), position: 0 },
-    });
-    await logActivity(tx, { type: "task", id: kickoff.id, kind: "CREATED", authorId: userId, label: kickoff.title, body: "Created automatically from the project task template" });
+    // Task board: id dibuat di muka lalu dimasukkan sekaligus (createMany) — di serverless setiap query ke DB cloud memakan
+    // waktu, dan puluhan query berurutan dalam satu transaksi bisa melewati batas waktunya.
+    const tasks: Prisma.TaskCreateManyInput[] = [
+      { id: randomUUID(), project_id: project.id, title: "Kickoff Meeting", status: "TODO", priority: "HIGH", start_date: now, due_date: addDays(now, 2), position: 0 },
+    ];
+    const kickoffId = tasks[0].id!;
     for (const lp of lead.products) {
-      let prev = kickoff.id;
+      let prev = kickoffId;
       let cursor = addDays(now, 3);
       let pos = 1;
       for (const t of TASK_TEMPLATE) {
         const due = addDays(cursor, t.days - 1);
-        const created = await tx.task.create({
-          data: {
-            project_id: project.id,
-            title: `[${lp.product.code}] ${t.title}`,
-            status: "TODO",
-            priority: t.title === "UAT" ? "HIGH" : "MEDIUM",
-            start_date: cursor,
-            due_date: due,
-            depends_on_id: prev,
-            position: pos++,
-          },
+        const id = randomUUID();
+        tasks.push({
+          id, project_id: project.id, title: `[${lp.product.code}] ${t.title}`, status: "TODO", priority: t.title === "UAT" ? "HIGH" : "MEDIUM",
+          start_date: cursor, due_date: due, depends_on_id: prev, position: pos++,
         });
-        await logActivity(tx, { type: "task", id: created.id, kind: "CREATED", authorId: userId, label: created.title, body: "Created automatically from the project task template" });
-        prev = created.id;
+        prev = id;
         cursor = addDays(due, 1);
       }
     }
+    await tx.task.createMany({ data: tasks });
+    await tx.activity.createMany({
+      data: tasks.map((t) => ({ record_type: "task", record_id: t.id!, kind: "CREATED", body: "Created automatically from the project task template", record_label: t.title, author_id: userId })),
+    });
 
     // 2. API Key / License per produk
+    const keyRows: Prisma.ApiKeyCreateManyInput[] = [];
     for (const lp of lead.products) {
       const env = lp.environment as Env;
       const k = generateKey(env);
-      const created = await tx.apiKey.create({
-        data: {
-          client_id: client.id,
-          project_id: project.id,
-          product_id: lp.product_id,
-          key_hash: k.hash,
-          prefix: k.prefix,
-          key_hint: k.hint,
-          environment: env,
-          rate_limit: lp.product.default_rate_limit,
-          expires_at: lp.license_months > 0 ? addMonths(now, lp.license_months) : null,
-        },
+      const id = randomUUID();
+      keyRows.push({
+        id, client_id: client.id, project_id: project.id, product_id: lp.product_id, key_hash: k.hash, prefix: k.prefix, key_hint: k.hint, environment: env,
+        rate_limit: lp.product.default_rate_limit, expires_at: lp.license_months > 0 ? addMonths(now, lp.license_months) : null,
       });
       revealed.push({ product: `${lp.product.code} — ${lp.product.name}`, environment: env, key: k.plain });
-      licenseIds.push(created.id);
-      await logActivity(tx, { type: "license", id: created.id, kind: "CREATED", authorId: userId, label: `${client.name} — ${lp.product.name}`, body: `Generated automatically when lead "${lead.title}" was closed as Won (${env})` });
+      licenseIds.push(id);
     }
+    await tx.apiKey.createMany({ data: keyRows });
+    await tx.activity.createMany({
+      data: lead.products.map((lp, i) => ({
+        record_type: "license", record_id: licenseIds[i], kind: "CREATED", author_id: userId, record_label: `${client.name} — ${lp.product.name}`,
+        body: `Generated automatically when lead "${lead.title}" was closed as Won (${lp.environment})`,
+      })),
+    });
 
     // 3. Bills sesuai skema tagihan tiap produk
     const bills = await createBillsForLead(tx, { leadId: lead.id, leadTitle: lead.title, clientId: client.id, projectId: project.id, lines: lead.products, plans, licenseIds, start: now, authorId: userId });
@@ -108,9 +107,9 @@ export async function closeLeadAsWon(leadId: string, userId: string, plans: Reco
     // Riwayat: lead, client, dan project hasil otomatisasi
     await logActivity(tx, { type: "lead", id: lead.id, kind: "EVENT", authorId: userId, label: lead.title, body: `Status changed to Closed Won — project, ${lead.products.length} API key(s) and ${bills} bill(s) were created automatically for ${client.name}` });
     await logActivity(tx, { type: "client", id: client.id, kind: "EVENT", authorId: userId, label: client.name, body: `Lead "${lead.title}" closed as Won — project and ${lead.products.length} license(s) created` });
-    await logActivity(tx, { type: "project", id: project.id, kind: "CREATED", authorId: userId, label: project.name, body: `Created automatically with ${await tx.task.count({ where: { project_id: project.id } })} tasks when lead "${lead.title}" was closed as Won` });
+    await logActivity(tx, { type: "project", id: project.id, kind: "CREATED", authorId: userId, label: project.name, body: `Created automatically with ${tasks.length} tasks when lead "${lead.title}" was closed as Won` });
     return client.id;
-  });
+  }, { maxWait: 15000, timeout: 60000 }); // batas default Prisma (5 dtk) terlalu pendek untuk DB cloud
 
   return { clientId, revealed, licenseIds };
 }

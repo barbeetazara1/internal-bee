@@ -9,7 +9,7 @@ import { deleteDemos } from "@/app/actions/demo";
 
 export default async function DemoPage() {
   const user = await requireUser();
-  const demos = await prisma.demo.findMany({ orderBy: { created_at: "desc" }, include: { client: true, product: true } });
+  const demos = await prisma.demo.findMany({ relationLoadStrategy: "join", orderBy: { created_at: "desc" }, include: { client: true, product: true } });
   const canManage = user.role !== "PROJECT";
 
   const columns: Col[] = [

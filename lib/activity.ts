@@ -74,15 +74,15 @@ export async function backfillActivities() {
   const lHas = await has("lead");
   for (const l of await prisma.lead.findMany()) if (!lHas.has(l.id)) await mk("lead", l.id, l.owner_id, l.created_at, l.title);
   const cHas = await has("client");
-  for (const c of await prisma.client.findMany({ include: { leads: true } })) if (!cHas.has(c.id)) await mk("client", c.id, c.leads[0]?.owner_id ?? admin.id, c.created_at, c.name);
+  for (const c of await prisma.client.findMany({ relationLoadStrategy: "join", include: { leads: true } })) if (!cHas.has(c.id)) await mk("client", c.id, c.leads[0]?.owner_id ?? admin.id, c.created_at, c.name);
   const jHas = await has("project");
-  for (const p of await prisma.project.findMany({ include: { lead: true } })) if (!jHas.has(p.id)) await mk("project", p.id, p.lead?.owner_id ?? admin.id, p.created_at, p.name, p.lead ? `Created automatically when lead "${p.lead.title}" was closed as Won` : undefined);
+  for (const p of await prisma.project.findMany({ relationLoadStrategy: "join", include: { lead: true } })) if (!jHas.has(p.id)) await mk("project", p.id, p.lead?.owner_id ?? admin.id, p.created_at, p.name, p.lead ? `Created automatically when lead "${p.lead.title}" was closed as Won` : undefined);
   const kHas = await has("license");
-  for (const k of await prisma.apiKey.findMany({ include: { client: { include: { leads: true } }, product: true } })) {
+  for (const k of await prisma.apiKey.findMany({ relationLoadStrategy: "join", include: { client: { include: { leads: true } }, product: true } })) {
     if (!kHas.has(k.id)) await mk("license", k.id, k.client.leads[0]?.owner_id ?? admin.id, k.created_at, `${k.client.name} — ${k.product.name}`, "Generated automatically when the lead was closed as Won");
   }
   const tHas = await has("task");
-  for (const t of await prisma.task.findMany({ include: { project: { include: { lead: true } } } })) {
+  for (const t of await prisma.task.findMany({ relationLoadStrategy: "join", include: { project: { include: { lead: true } } } })) {
     if (!tHas.has(t.id)) await mk("task", t.id, t.project.lead?.owner_id ?? admin.id, t.created_at, t.title, t.project.lead ? "Created automatically from the project task template" : undefined);
   }
 }

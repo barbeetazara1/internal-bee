@@ -12,7 +12,7 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
   const user = await requireRole("SUPER_ADMIN", "SALES");
   const { project: projectId } = await searchParams;
   const project = projectId ? await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, name: true } }) : null;
-  const bills = await prisma.bill.findMany({ where: project ? { project_id: project.id } : undefined, orderBy: [{ due_date: "asc" }, { code: "asc" }], include: { client: true, product: true } });
+  const bills = await prisma.bill.findMany({ relationLoadStrategy: "join", where: project ? { project_id: project.id } : undefined, orderBy: [{ due_date: "asc" }, { code: "asc" }], include: { client: true, product: true } });
   const eff = (b: (typeof bills)[number]) => effectiveBillStatus(b);
 
   const columns: Col[] = [

@@ -7,7 +7,7 @@ import { effectiveStatus } from "@/lib/keys";
 export default async function ReportsPage() {
   await requireRole("SUPER_ADMIN");
   const [won, open, keys] = await Promise.all([
-    prisma.lead.findMany({ where: { status: "CLOSED_WON" }, include: { products: { include: { product: true } } } }),
+    prisma.lead.findMany({ relationLoadStrategy: "join", where: { status: "CLOSED_WON" }, include: { products: { include: { product: true } } } }),
     prisma.leadProduct.findMany({ where: { lead: { status: { notIn: ["CLOSED_WON", "CLOSED_LOST"] } } } }),
     prisma.apiKey.findMany({ where: { kind: "PRODUCTION" }, select: { status: true, expires_at: true } }),
   ]);

@@ -7,7 +7,7 @@ import Chatter, { type ActivityDTO } from "./Chatter";
 export default async function ChatterSection({ type, id, label }: { type: RecordType; id: string; label: string }) {
   const me = await requireUser();
   const [rows, users] = await Promise.all([
-    prisma.activity.findMany({ where: { record_type: type, record_id: id }, orderBy: { created_at: "asc" }, include: { author: { select: { id: true, name: true } } } }),
+    prisma.activity.findMany({ relationLoadStrategy: "join", where: { record_type: type, record_id: id }, orderBy: { created_at: "asc" }, include: { author: { select: { id: true, name: true } } } }),
     prisma.user.findMany({ where: { is_active: true, role: { in: ACCESS[type] } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   const items: ActivityDTO[] = rows.map((r) => ({
