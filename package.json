@@ -8,6 +8,7 @@
     "start": "next start -p 3400",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:set-admin": "tsx prisma/set-admin.ts",
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
     "postinstall": "prisma generate"
   },
