@@ -24,3 +24,5 @@ npm-debug.log*
 .idea/
 .vscode/
 .claude/
+.vercel
+.env*
