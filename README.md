@@ -12,7 +12,7 @@ Portal operasional internal: CRM lead → client & project → lisensi API → t
 | **Product Catalog** | Master produk: kode, tipe lisensi (Tahunan / Bulanan / One-time), harga dasar. |
 | **Leads (CRM)** | Pipeline Baru → Dihubungi → Qualified → Proposal → Negosiasi → Closed Won / Lost. Produk di lead bisa diedit (produk, tipe lisensi, harga) sampai tahap Negosiasi. |
 | **Closed Won** | Modal sistem pembayaran per produk, lalu otomatis membuat **Project + task board**, **API Key** per produk, dan **Bills**. |
-| **Bills** | Tagihan hasil sistem pembayaran: Bayar Penuh, DP + Cicilan, Cicilan Sama Rata, atau Per Bulan (tanggal pembayaran pertama dipilih user, sisanya otomatis). Tandai lunas **wajib bukti** (PNG/JPG/PDF, maks. 5 MB). Invoice per bill (cetak/PDF). |
+| **Bills** | Tagihan hasil sistem pembayaran: Bayar Penuh, DP + Cicilan, Cicilan Sama Rata, atau Per Bulan (tanggal pembayaran pertama dipilih user, sisanya otomatis). Tandai lunas **wajib bukti** (PNG/JPG/PDF, maks. 4 MB). Invoice per bill (cetak/PDF). |
 | **Demo** | Permintaan demo → license key sandbox berjangka waktu. |
 | **Clients & Licenses** | Data client, lisensi Production dan Demo (refresh token, suspend, revoke). Key hanya ditampilkan sekali; di database hanya hash SHA-256. |
 | **Projects** | Daftar (group by client), Kanban sprint, Gantt, status bar, smart button Bills, dan tombol **Termin Invoice** untuk pembayaran bertahap. |
@@ -56,6 +56,8 @@ Akun seed (password dev: `BeeDev#2026`):
 |---|---|---|
 | `DATABASE_URL` | ya | Connection string PostgreSQL. |
 | `AUTH_SECRET` | ya | Kunci penanda tangan token sesi (HS256). Buat dengan `openssl rand -base64 32`. Mengganti nilainya membuat semua sesi login keluar. |
+| `BLOB_READ_WRITE_TOKEN` | tidak | Bila terisi, bukti pembayaran disimpan di Vercel Blob (store private), bukan di folder `storage/`. Wajib di Vercel. |
+| `COOKIE_SECURE` | tidak | Di production cookie sesi diberi flag `Secure`. Isi `false` hanya bila diakses lewat http tanpa HTTPS. |
 
 ### Script npm
 
@@ -140,7 +142,7 @@ Contoh Nginx (sertifikat bisa dari certbot):
 ```nginx
 server {
   server_name portal.contoh.com;
-  client_max_body_size 8m;            # unggah bukti pembayaran (maks. 5 MB)
+  client_max_body_size 8m;            # unggah bukti pembayaran (maks. 4 MB)
   location / {
     proxy_pass http://127.0.0.1:3400;
     proxy_set_header Host $host;
@@ -150,7 +152,35 @@ server {
 }
 ```
 
-### 6. Update versi baru
+### Deploy di Vercel (+ Supabase + Vercel Blob)
+
+Vercel menjalankan aplikasi secara serverless, jadi ada tiga hal yang dipisah dari server:
+
+| Kebutuhan | Layanan | Catatan |
+|---|---|---|
+| Database PostgreSQL | Supabase (atau Neon / Postgres lain) | `DATABASE_URL` memakai **connection pooler** (port 6543) dengan `?pgbouncer=true&connection_limit=1`. |
+| Bukti pembayaran | Vercel Blob (store **Private**) | Disk Vercel bersifat sementara, jadi file tidak boleh disimpan lokal. `BLOB_READ_WRITE_TOKEN` terisi otomatis. |
+| Secret sesi | Environment Variables Vercel | `AUTH_SECRET` (`openssl rand -base64 32`). |
+
+Langkah:
+
+1. **Supabase** → buat project → *Connect* → salin dua connection string: **direct** (port 5432, untuk `db push`) dan **pooler / transaction** (port 6543, untuk aplikasi).
+2. **Siapkan tabel & data awal dari komputer Anda** (sekali saja; URL direct hanya dipakai di terminal, tidak disimpan di file):
+   ```bash
+   DATABASE_URL="<direct-5432>" npx prisma db push
+   DATABASE_URL="<direct-5432>" npm run db:seed      # opsional, data contoh — ganti password akun seed!
+   ```
+3. **Vercel** → login memakai akun yang benar (`npx vercel login`, lalu `npx vercel whoami` untuk memastikan), lalu `npx vercel link` di folder proyek.
+4. **Environment Variables** (Project → Settings → Environment Variables, Production): `DATABASE_URL` = string **pooler**, `AUTH_SECRET`.
+5. **Blob**: Project → Storage → Create → Blob → pilih **Private** → connect ke project (menambah `BLOB_READ_WRITE_TOKEN`).
+6. **Deploy**: `npx vercel --prod` (atau push ke GitHub bila repo sudah terhubung ke Vercel).
+
+Catatan khusus Vercel:
+- Batas ukuran request serverless 4,5 MB, jadi bukti pembayaran dibatasi **4 MB**.
+- Rate limit `/api/v1/verify` bersifat in-memory per instance serverless, sehingga batas per menit tidak presisi di Vercel. Untuk batas yang ketat, pindahkan ke Redis (mis. Upstash).
+- Setiap perubahan skema Prisma harus dijalankan ke database cloud dengan `db push` (langkah 2) **sebelum** deploy versi barunya.
+
+### Update versi baru (server sendiri)
 
 ```bash
 cd /srv/internal-bee
@@ -172,14 +202,14 @@ sudo systemctl restart internal-bee
 ## Catatan penting
 
 **Penyimpanan bukti pembayaran**
-- File bukti tidak disimpan di database. Isinya diperiksa dari byte-nya (PNG/JPEG/PDF asli, bukan sekadar ekstensi), lalu disimpan di `storage/bill-proofs/`. Database hanya menyimpan nama, jenis, dan ukuran.
+- File bukti tidak disimpan di database. Isinya diperiksa dari byte-nya (PNG/JPEG/PDF asli, bukan sekadar ekstensi), lalu disimpan di `storage/bill-proofs/` (atau Vercel Blob private bila `BLOB_READ_WRITE_TOKEN` terisi). Database hanya menyimpan nama, jenis, dan ukuran.
 - Folder `storage/` ada di `.gitignore` dan hanya disajikan lewat `/api/bills/:id/proof` untuk Super Admin dan Sales yang sudah login. Di deploy berbasis container/serverless, pasang sebagai volume persisten.
 
 **Skema database**
 - Proyek memakai `prisma db push` (tanpa folder migrasi). Cocok untuk pengembangan, tetapi perubahan yang menghapus kolom (contoh: kolom skema tagihan yang sudah dibuang dari Product dan Lead) membutuhkan `--accept-data-loss`. Untuk produksi jangka panjang, sebaiknya beralih ke `prisma migrate` agar perubahan skema terdokumentasi dan bisa dibatalkan.
 
 **Keamanan**
-- Cookie sesi (`ib_session`, 8 jam) bersifat `httpOnly` + `sameSite=lax`, namun belum diberi flag `secure`. Tambahkan `secure: true` di `lib/auth.ts` begitu aplikasi hanya diakses lewat HTTPS.
+- Cookie sesi (`ib_session`, 8 jam) bersifat `httpOnly` + `sameSite=lax`, dan di production otomatis diberi flag `Secure` (butuh HTTPS; set `COOKIE_SECURE=false` hanya bila terpaksa memakai http).
 - Rate limit pada `/api/v1/verify` bersifat in-memory per proses (cukup untuk satu instance). Untuk lebih dari satu instance atau trafik tinggi, pindahkan ke Redis.
 - Token API hanya disimpan sebagai hash SHA-256; token mentah muncul sekali saat dibuat/di-refresh.
 

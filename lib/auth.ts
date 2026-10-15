@@ -12,7 +12,7 @@ export async function createSession(user: { id: string; role: string }) {
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("8h")
     .sign(secret());
-  (await cookies()).set(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 8 * 3600 });
+  (await cookies()).set(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production" && process.env.COOKIE_SECURE !== "false", path: "/", maxAge: 8 * 3600 });
 }
 
 export async function destroySession() {

@@ -7,7 +7,7 @@ import { FileText, Paperclip, UploadCloud, X } from "lucide-react";
 import { toast } from "./toast";
 
 const OK_TYPES = ["image/png", "image/jpeg", "application/pdf"];
-const MAX = 5 * 1024 * 1024;
+const MAX = 4 * 1024 * 1024;
 const size = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
 /** Tombol "Tandai Lunas": membuka modal untuk melampirkan bukti pembayaran (PNG, JPG, atau PDF) yang wajib. */
@@ -31,7 +31,7 @@ export default function PaidDialog({ billId, code, amount }: { billId: string; c
   function pick(f: File | undefined) {
     if (!f) return;
     if (!OK_TYPES.includes(f.type)) return setError("Proof must be a PNG, JPG or PDF file");
-    if (f.size > MAX) return setError("Proof file must be 5 MB or smaller");
+    if (f.size > MAX) return setError("Proof file must be 4 MB or smaller");
     if (preview) URL.revokeObjectURL(preview);
     setError("");
     setFile(f);
@@ -67,7 +67,7 @@ export default function PaidDialog({ billId, code, amount }: { billId: string; c
       <form onSubmit={submit} role="dialog" aria-modal="true" aria-label="Tandai Lunas" className="card w-full max-w-lg p-0 shadow-2xl">
         <div className="border-b border-slate-100 px-6 py-4">
           <h2 className="text-base font-semibold text-slate-900">Tandai lunas: {code}</h2>
-          <p className="mt-1 text-sm text-slate-500">Lampirkan bukti pembayaran sebesar <b className="text-slate-800">{amount}</b> (PNG, JPG, atau PDF, maks. 5 MB). Bukti wajib diisi.</p>
+          <p className="mt-1 text-sm text-slate-500">Lampirkan bukti pembayaran sebesar <b className="text-slate-800">{amount}</b> (PNG, JPG, atau PDF, maks. 4 MB). Bukti wajib diisi.</p>
         </div>
         <div className="px-6 py-5">
           <input ref={input} type="file" accept="image/png,image/jpeg,application/pdf,.png,.jpg,.jpeg,.pdf" className="sr-only" onChange={(e) => pick(e.target.files?.[0])} />
@@ -82,7 +82,7 @@ export default function PaidDialog({ billId, code, amount }: { billId: string; c
             >
               <UploadCloud size={28} className="text-slate-400" />
               <span className="text-sm font-medium text-slate-700">Pilih file atau tarik ke sini</span>
-              <span className="text-xs text-slate-400">PNG, JPG, atau PDF · maks. 5 MB</span>
+              <span className="text-xs text-slate-400">PNG, JPG, atau PDF · maks. 4 MB</span>
             </button>
           ) : (
             <div className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">

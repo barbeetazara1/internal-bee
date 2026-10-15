@@ -8,7 +8,7 @@ import { PROOF_MAX_BYTES, readProof, removeProof, saveProof, sniff } from "@/lib
 
 type Ctx = { params: Promise<{ id: string }> };
 
-/** Tandai bill lunas dengan bukti pembayaran (PNG / JPG / PDF, maks. 5 MB). Bukti wajib. */
+/** Tandai bill lunas dengan bukti pembayaran (PNG / JPG / PDF, maks. 4 MB). Bukti wajib. */
 export async function POST(req: Request, { params }: Ctx) {
   const user = await getUser();
   if (!user || !can.manageBills(user.role)) return NextResponse.json({ ok: false, message: "You don't have access to this record" }, { status: 403 });
@@ -20,7 +20,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const fd = await req.formData().catch(() => null);
   const file = fd?.get("proof");
   if (!(file instanceof File) || file.size === 0) return NextResponse.json({ ok: false, message: "Payment proof is required" }, { status: 400 });
-  if (file.size > PROOF_MAX_BYTES) return NextResponse.json({ ok: false, message: "Proof file must be 5 MB or smaller" }, { status: 400 });
+  if (file.size > PROOF_MAX_BYTES) return NextResponse.json({ ok: false, message: "Proof file must be 4 MB or smaller" }, { status: 400 });
   const buf = Buffer.from(await file.arrayBuffer());
   const type = sniff(buf);
   if (!type) return NextResponse.json({ ok: false, message: "Proof must be a PNG, JPG or PDF file" }, { status: 400 });
