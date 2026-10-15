@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --surface: 255 255 255;
+  --slate-50: 248 250 252; --slate-100: 241 245 249; --slate-200: 226 232 240; --slate-300: 203 213 225;
+  --slate-400: 148 163 184; --slate-500: 100 116 139; --slate-600: 71 85 105; --slate-700: 51 65 85;
+  --slate-800: 30 41 59; --slate-900: 15 23 42; --slate-950: 2 6 23;
+}
+.dark {
+  color-scheme: dark;
+  --surface: 22 31 49;
+  --slate-50: 11 18 32; --slate-100: 30 41 59; --slate-200: 45 58 78; --slate-300: 71 85 105;
+  --slate-400: 100 116 139; --slate-500: 148 163 184; --slate-600: 176 188 205; --slate-700: 203 213 225;
+  --slate-800: 226 232 240; --slate-900: 241 245 249; --slate-950: 248 250 252;
+}
+
+@layer base {
+  body { @apply bg-slate-50 text-base text-slate-800 antialiased; }
+}
+
+@layer components {
+  .card { @apply rounded-xl border border-slate-200 bg-surface shadow-sm; }
+  .btn { @apply inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-surface px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50; }
+  .btn-primary { @apply border-amber-500 bg-amber-500 text-slate-900 hover:bg-amber-400; }
+  .btn-danger { @apply border-red-200 bg-surface text-red-600 hover:bg-red-50; }
+  .btn-sm { @apply px-2 py-1 text-xs; }
+  .input { @apply w-full rounded-lg border border-slate-300 bg-surface px-3 py-1.5 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200; }
+  .label { @apply mb-1.5 block text-sm font-semibold text-slate-700; }
+  .th { @apply px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500; }
+  .td { @apply px-4 py-3 text-sm; }
+}
+
+/* Form lebih rapat (mis. detail lead): label & isian lebih pendek */
+.fields-compact .label { margin-bottom: .125rem; }
+.fields-compact .input { padding-top: .25rem; padding-bottom: .25rem; }
+
+/* Field wajib yang masih kosong ditandai merah setelah Save pertama gagal validasi */
+.show-invalid input.input:invalid, .show-invalid textarea.input:invalid { border-color: rgb(239 68 68); background-color: rgb(239 68 68 / .06); }
+.show-invalid div:has(> input[aria-hidden]:invalid) > button[data-select] { border-color: rgb(239 68 68); background-color: rgb(239 68 68 / .06); }
+
+/* Mode baca pada halaman record: field tampil seperti teks biasa */
+.record-view .input { border-color: transparent; background-color: transparent; padding-left: 0; padding-right: 0; box-shadow: none; opacity: 1; color: rgb(var(--slate-800)); -webkit-text-fill-color: rgb(var(--slate-800)); appearance: none; resize: none; cursor: default; }
+.record-view .input::placeholder { color: transparent; }
+.record-view .select-chevron { display: none; }
+.record-view .money-prefix { left: 0; }
+.record-view .money-input { padding-left: 1.6rem; }
+.record-view button[data-select] > span { color: rgb(var(--slate-800)); }
+
+.edit-lock button:disabled, .edit-lock input:disabled:not([aria-hidden]), .edit-lock textarea:disabled { opacity: .55; cursor: not-allowed; }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}
+
+/* Penyesuaian warna semantik (badge, alert) untuk dark mode */
+.dark .bg-amber-50, .dark .bg-amber-100 { background-color: rgb(245 158 11 / .14); }
+.dark .text-amber-600, .dark .text-amber-700, .dark .text-amber-800, .dark .text-amber-900 { color: #fcd34d; }
+.dark .ring-amber-200, .dark .border-amber-200 { --tw-ring-color: rgb(245 158 11 / .35); border-color: rgb(245 158 11 / .35); }
+.dark .bg-emerald-50, .dark .bg-emerald-100 { background-color: rgb(16 185 129 / .14); }
+.dark .text-emerald-600, .dark .text-emerald-700, .dark .text-emerald-800, .dark .text-emerald-900 { color: #6ee7b7; }
+.dark .ring-emerald-200, .dark .border-emerald-200 { --tw-ring-color: rgb(16 185 129 / .35); border-color: rgb(16 185 129 / .35); }
+.dark .bg-red-50, .dark .bg-red-100 { background-color: rgb(239 68 68 / .14); }
+.dark .text-red-600, .dark .text-red-700, .dark .text-red-800, .dark .text-red-900 { color: #fca5a5; }
+.dark .ring-red-200, .dark .border-red-200 { --tw-ring-color: rgb(239 68 68 / .35); border-color: rgb(239 68 68 / .35); }
+.dark .bg-sky-50, .dark .bg-sky-100 { background-color: rgb(14 165 233 / .14); }
+.dark .text-sky-600, .dark .text-sky-700, .dark .text-sky-800, .dark .text-sky-900 { color: #7dd3fc; }
+.dark .ring-sky-200, .dark .border-sky-200 { --tw-ring-color: rgb(14 165 233 / .35); border-color: rgb(14 165 233 / .35); }
+.dark .bg-violet-50, .dark .bg-violet-100 { background-color: rgb(139 92 246 / .14); }
+.dark .text-violet-600, .dark .text-violet-700, .dark .text-violet-800, .dark .text-violet-900 { color: #c4b5fd; }
+.dark .ring-violet-200, .dark .border-violet-200 { --tw-ring-color: rgb(139 92 246 / .35); border-color: rgb(139 92 246 / .35); }
+.dark .btn-danger:hover { background-color: rgb(239 68 68 / .14); }
+.dark .btn-primary { color: #0f172a; }
+.dark .btn-primary:hover { background-color: rgb(251 191 36); }
+
+/* Sembunyikan halaman sampai terjemahan awal selesai agar tidak berkedip. */
+html[data-i18n="pending"] body { visibility: hidden; }
+
+/* Sidebar utama bisa diciutkan menjadi rel ikon (atribut data-sb di <html>). */
+.app-sidebar { transition: width 0.2s ease; }
+.app-content { transition: margin-left 0.2s ease; }
+html[data-sb="collapsed"] .app-sidebar { width: 4rem; }
+html[data-sb="collapsed"] .app-content { margin-left: 4rem; }
+html[data-sb="collapsed"] .app-sidebar .sb-hide { display: none; }
+html[data-sb="collapsed"] .app-sidebar .sb-only { display: flex; }
+html[data-sb="collapsed"] .app-sidebar .sb-link { justify-content: center; padding-left: 0; padding-right: 0; }
+html[data-sb="collapsed"] .app-sidebar .sb-head { justify-content: center; padding-left: 0; padding-right: 0; }
+/* Tombol ciut muncul saat sidebar di-hover (atau difokus lewat keyboard); di layar sentuh selalu tampil. */
+.sb-toggle { opacity: 0; transition: opacity 0.15s ease; }
+.app-sidebar:hover .sb-toggle, .sb-toggle:focus-visible { opacity: 1; }
+@media (hover: none) { .sb-toggle { opacity: 1; } }

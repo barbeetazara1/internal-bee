@@ -1,0 +1,26 @@
+# dependencies & build output
+node_modules/
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# secrets & local config — jangan pernah di-commit
+.env
+.env.*
+!.env.example
+user.txt
+*.key
+*.pem
+
+# data runtime (bukti pembayaran yang diunggah user)
+storage/
+
+# logs, OS & editor
+*.log
+npm-debug.log*
+.DS_Store
+.idea/
+.vscode/
+.claude/

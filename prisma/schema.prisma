@@ -1,0 +1,254 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  name          String
+  email         String   @unique
+  password_hash String
+  role          String // SUPER_ADMIN | SALES | PROJECT
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  leads         Lead[]
+  tasks         Task[]
+  activities    Activity[]
+  notifications Notification[]
+  demos         Demo[]
+}
+
+model Product {
+  id                 String        @id @default(uuid())
+  name               String // e.g., "Internal Bee OCR API"
+  code               String        @unique // e.g., "PROD-OCR-01"
+  license_type       String        @default("YEARLY") // YEARLY | MONTHLY | ONE_TIME
+  default_rate_limit Int           @default(1000)
+  base_price         Decimal       @default(0) @db.Decimal(14, 2)
+  description        String?
+  is_active          Boolean       @default(true)
+  created_at         DateTime      @default(now())
+  leadProducts       LeadProduct[]
+  apiKeys            ApiKey[]
+  projects           Project[]
+  demos              Demo[]
+  bills              Bill[]
+}
+
+model Lead {
+  id           String        @id @default(uuid())
+  title        String
+  contact_name String
+  email        String?
+  phone        String?
+  source       String?
+  notes        String?
+  status       String        @default("NEW") // NEW | CONTACTED | QUALIFIED | PROPOSAL | NEGOTIATION | CLOSED_WON | CLOSED_LOST
+  owner_id     String
+  client_id    String
+  closed_at    DateTime?
+  created_at   DateTime      @default(now())
+  owner        User          @relation(fields: [owner_id], references: [id])
+  client       Client        @relation(fields: [client_id], references: [id])
+  products     LeadProduct[]
+  project      Project?
+  bills        Bill[]
+}
+
+model LeadProduct {
+  id             String  @id @default(uuid())
+  lead_id        String
+  product_id     String
+  quantity       Int     @default(1)
+  price          Decimal @db.Decimal(14, 2) // harga penawaran khusus (per unit)
+  license_months Int     @default(12) // estimasi masa berlaku lisensi (0 = one-time, 1 = bulanan, selain itu tahunan)
+  environment    String  @default("PRODUCTION") // SANDBOX | PRODUCTION
+  lead           Lead    @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+  product        Product @relation(fields: [product_id], references: [id])
+
+  @@unique([lead_id, product_id])
+}
+
+model Client {
+  id         String    @id @default(uuid())
+  code       String    @unique
+  name       String
+  contact_name String?
+  email      String?
+  phone      String?
+  country     String?
+  province    String?
+  city        String?
+  district    String? // Kecamatan / Kelurahan
+  postal_code String?
+  address    String? // Alamat lengkap
+  created_at DateTime  @default(now())
+  leads      Lead[]
+  projects   Project[]
+  apiKeys    ApiKey[]
+  demos      Demo[]
+  bills      Bill[]
+}
+
+model Project {
+  id         String    @id @default(uuid())
+  name       String
+  client_id  String
+  lead_id    String?   @unique
+  product_id String?
+  status     String    @default("ACTIVE") // ACTIVE | ON_HOLD | COMPLETED
+  start_date DateTime
+  end_date   DateTime?
+  created_at DateTime  @default(now())
+  client     Client    @relation(fields: [client_id], references: [id])
+  lead       Lead?     @relation(fields: [lead_id], references: [id])
+  product    Product?  @relation(fields: [product_id], references: [id])
+  tasks      Task[]
+  apiKeys    ApiKey[]
+  bills      Bill[]
+}
+
+model Task {
+  id            String   @id @default(uuid())
+  project_id    String
+  title         String
+  description   String?
+  status        String   @default("TODO") // TODO | IN_PROGRESS | IN_REVIEW | DONE
+  priority      String   @default("MEDIUM") // LOW | MEDIUM | HIGH
+  assignee_id   String?
+  start_date    DateTime
+  due_date      DateTime
+  depends_on_id String?
+  position      Int      @default(0)
+  created_at    DateTime @default(now())
+  project       Project  @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  assignee      User?    @relation(fields: [assignee_id], references: [id])
+  depends_on    Task?    @relation("TaskDeps", fields: [depends_on_id], references: [id], onDelete: SetNull)
+  dependents    Task[]   @relation("TaskDeps")
+}
+
+model ApiKey {
+  id           String     @id @default(uuid())
+  client_id    String
+  project_id   String?
+  product_id   String
+  key_hash     String     @unique // Hashed token SHA-256
+  prefix       String // "ib_live_" | "ib_test_"
+  key_hint     String // 4 karakter terakhir (untuk identifikasi, bukan rahasia)
+  environment  String     @default("PRODUCTION") // SANDBOX | PRODUCTION
+  kind         String     @default("PRODUCTION") // PRODUCTION | DEMO
+  demo_id      String?
+  status       String     @default("ACTIVE") // ACTIVE | SUSPENDED | EXPIRED | REVOKED
+  rate_limit   Int        @default(1000) // req/min
+  expires_at   DateTime?
+  last_used_at DateTime?
+  rotated_at   DateTime?
+  revoked_at   DateTime?
+  created_at   DateTime   @default(now())
+  client       Client     @relation(fields: [client_id], references: [id])
+  project      Project?   @relation(fields: [project_id], references: [id])
+  product      Product    @relation(fields: [product_id], references: [id])
+  demo         Demo?      @relation(fields: [demo_id], references: [id])
+  usage        UsageLog[]
+  bills        Bill[]
+}
+
+model UsageLog {
+  id          String   @id @default(uuid())
+  api_key_id  String
+  endpoint    String
+  status_code Int
+  created_at  DateTime @default(now())
+  api_key     ApiKey   @relation(fields: [api_key_id], references: [id], onDelete: Cascade)
+
+  @@index([api_key_id, created_at])
+}
+
+/// Riwayat & komentar per record (chatter): pembuatan, perubahan, event, dan komentar user.
+model Activity {
+  id            String         @id @default(uuid())
+  record_type   String // product | lead | client | project | license | demo
+  record_id     String
+  kind          String // CREATED | UPDATED | EVENT | COMMENT
+  body          String?
+  changes       Json? // [{ field, from, to }]
+  mentions      Json? // [{ id, name }]
+  record_label  String?
+  author_id     String
+  created_at    DateTime       @default(now())
+  author        User           @relation(fields: [author_id], references: [id])
+  notifications Notification[]
+
+  @@index([record_type, record_id, created_at])
+}
+
+model Notification {
+  id          String    @id @default(uuid())
+  user_id     String
+  activity_id String
+  read_at     DateTime?
+  created_at  DateTime  @default(now())
+  user        User      @relation(fields: [user_id], references: [id])
+  activity    Activity  @relation(fields: [activity_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, read_at])
+}
+
+/// Permintaan demo dari client untuk sebuah produk. Saat dimulai, dibuat license key demo (sandbox, berjangka waktu).
+model Demo {
+  id           String    @id @default(uuid())
+  code         String    @unique // DEMO-0001
+  client_id    String
+  product_id   String
+  contact_name String
+  email        String?
+  phone        String?
+  demo_days    Int       @default(14)
+  status       String    @default("REQUESTED") // REQUESTED | ACTIVE | ENDED | CANCELLED
+  notes        String?
+  owner_id     String
+  started_at   DateTime?
+  ends_at      DateTime?
+  created_at   DateTime  @default(now())
+  client       Client    @relation(fields: [client_id], references: [id])
+  product      Product   @relation(fields: [product_id], references: [id])
+  owner        User      @relation(fields: [owner_id], references: [id])
+  apiKeys      ApiKey[]
+}
+
+/// Tagihan: terbentuk saat lead Closed Won sesuai sistem pembayaran (bayar penuh / DP / cicilan / per bulan) yang dipilih user.
+model Bill {
+  id           String    @id @default(uuid())
+  code         String    @unique
+  client_id    String
+  lead_id      String
+  project_id   String?
+  api_key_id   String?
+  product_id   String
+  kind         String    @default("INSTALLMENT") // FULL | DP | INSTALLMENT | MONTHLY — hasil sistem pembayaran yang dipilih saat Closed Won
+  period_no    Int       @default(1)
+  period_total Int       @default(1)
+  period_start DateTime?
+  period_end   DateTime?
+  amount       Decimal   @db.Decimal(14, 2)
+  due_date     DateTime
+  status       String    @default("UNPAID") // UNPAID | PAID | CANCELLED (OVERDUE = UNPAID lewat jatuh tempo, dihitung)
+  paid_at      DateTime?
+  notes        String?
+  proof_file   String? // nama file bukti pembayaran di storage/bill-proofs
+  proof_name   String? // nama asli file yang diunggah
+  proof_type   String? // image/png | image/jpeg | application/pdf
+  proof_size   Int?
+  created_at   DateTime  @default(now())
+  client       Client    @relation(fields: [client_id], references: [id])
+  lead         Lead      @relation(fields: [lead_id], references: [id])
+  project      Project?  @relation(fields: [project_id], references: [id])
+  api_key      ApiKey?   @relation(fields: [api_key_id], references: [id])
+  product      Product   @relation(fields: [product_id], references: [id])
+
+  @@index([status, due_date])
+}
