@@ -29,6 +29,8 @@ for (const [id, en, ...alias] of DICT) {
   }
 }
 for (const [en, id] of TO_ID_ONLY) register("id", en, id);
+// Log berbahasa Inggris yang tersimpan di DB tetapi memuat nilai berbahasa Indonesia (nama tahap, dsb.): terjemahkan isi slotnya saat bahasa English
+for (const p of ["Activity scheduled: {1} ({2}) at {3}", "Status changed: {1} → {2}", "Activity updated: {1} — {2}", "Activity done: {1}", "Activity reopened: {1}", "Activity deleted: {1}"]) register("en", p, p);
 for (const l of ["id", "en"] as Lang[]) rules[l].sort((a, b) => b.weight - a.weight);
 
 const MONTHS: Record<Lang, [RegExp, Record<string, string>]> = {

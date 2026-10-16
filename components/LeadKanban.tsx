@@ -4,15 +4,17 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, X } from "lucide-react";
-import { LEAD_FINAL, LEAD_LABEL, LEAD_STATUSES, canMoveLead } from "@/lib/constants";
+import { AlertTriangle, Search, X } from "lucide-react";
+import { LEAD_FINAL, LEAD_LABEL, LEAD_STATUSES, PRIORITY_TONE, canMoveLead } from "@/lib/constants";
 import { idr } from "@/lib/format";
 import { closeWon, setLeadStatus } from "@/app/actions/leads";
 import { confirmDialog } from "./confirm";
 import { toast } from "./toast";
 import PaymentDialog, { type PayLine } from "./PaymentDialog";
+import CardActivities, { type CardActivity } from "./CardActivities";
+import { Badge } from "./ui";
 
-export type KanbanLead = { id: string; title: string; client: string; contact: string; owner: string; status: string; value: number; products: number; created: string; lines: PayLine[] };
+export type KanbanLead = { id: string; title: string; client: string; contact: string; owner: string; status: string; value: number; products: number; created: string; lines: PayLine[]; priority: string; idle_since: string; activities: CardActivity[] };
 
 const FINAL = LEAD_FINAL as readonly string[];
 const ORDER = LEAD_STATUSES as readonly string[];
@@ -23,6 +25,10 @@ function dropCheck(l: KanbanLead, to: string): string | null {
   if (FINAL.includes(l.status)) return "Lead yang sudah ditutup tidak bisa dipindahkan";
   if (!canMoveLead(l.status, to)) return "Status hanya bisa maju, tidak bisa dikembalikan ke tahap sebelumnya";
   if (to === "CLOSED_WON" && l.status !== "NEGOTIATION") return "Closed Won hanya bisa dari tahap Negosiasi";
+  if (to !== "CLOSED_LOST") {
+    const open = l.activities.filter((a) => a.status !== "DONE").length;
+    if (open > 0) return `Selesaikan semua activity di tahap ${LEAD_LABEL[l.status]} terlebih dahulu (${open} belum selesai)`;
+  }
   if (to !== "CLOSED_LOST" && ORDER.indexOf(to) >= 2 && l.products === 0) return "Tambahkan minimal 1 produk di lead ini (dan Save) sebelum pindah ke tahap ini";
   return null;
 }
@@ -31,6 +37,19 @@ const DOT: Record<string, string> = {
   NEW: "bg-slate-400", CONTACTED: "bg-sky-500", QUALIFIED: "bg-violet-500", PROPOSAL: "bg-amber-500",
   NEGOTIATION: "bg-orange-500", CLOSED_WON: "bg-emerald-500", CLOSED_LOST: "bg-red-500",
 };
+const STALE_DAYS = 3;
+/** Hari keterlambatan activity terlama yang belum selesai di tahap ini; null bila belum lewat batas STALE_DAYS (lead final tidak dihitung). */
+function staleDays(l: KanbanLead, now: number): number | null {
+  if (FINAL.includes(l.status)) return null;
+  const planned = l.activities.filter((a) => a.status !== "DONE").map((a) => new Date(a.scheduled_at).getTime()).sort((a, b) => a - b)[0];
+  // Tanpa activity di tahap ini: hitung sejak lead dibuat / activity terakhir diselesaikan
+  const since = l.activities.length === 0 ? new Date(l.idle_since).getTime() : planned;
+  if (since === undefined) return null; // semua activity sudah selesai
+  const days = Math.floor((now - since) / 86400000);
+  return days >= STALE_DAYS ? days : null;
+}
+const PRIORITY_RANK: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+const PRIORITY_LABEL: Record<string, string> = { LOW: "Low", MEDIUM: "Medium", HIGH: "High" };
 const initials = (n: string) => n.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
 /**
@@ -41,6 +60,8 @@ export default function LeadKanban({ leads }: { leads: KanbanLead[] }) {
   const router = useRouter();
   const [, start] = useTransition();
   const [items, setItems] = useState(leads);
+  const [now, setNow] = useState<number | null>(null); // diisi setelah mount agar tidak beda dengan render server
+  useEffect(() => setNow(Date.now()), []);
   const [drag, setDrag] = useState<KanbanLead | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [won, setWon] = useState<KanbanLead | null>(null);
@@ -102,7 +123,7 @@ export default function LeadKanban({ leads }: { leads: KanbanLead[] }) {
       {slot ? createPortal(search, slot) : <div className="mb-3">{search}</div>}
       <div className="flex gap-4 overflow-x-auto pb-4">
         {LEAD_STATUSES.map((s) => {
-          const col = filtered.filter((l) => l.status === s);
+          const col = filtered.filter((l) => l.status === s).sort((a, b) => (PRIORITY_RANK[a.priority] ?? 3) - (PRIORITY_RANK[b.priority] ?? 3)); // High → Medium → Low; sama prioritas tetap terbaru dulu
           const total = col.reduce((a, l) => a + l.value, 0);
           const ok = drag ? drag.status !== s && !dropCheck(drag, s) : false; // kolom yang boleh menerima kartu yang sedang di-drag
           return (
@@ -146,7 +167,10 @@ export default function LeadKanban({ leads }: { leads: KanbanLead[] }) {
                     onDragEnd={() => { setDrag(null); setOver(null); }}
                     className={`block rounded-lg border border-slate-200 bg-surface p-3 shadow-sm transition hover:border-amber-300 hover:shadow ${FINAL.includes(l.status) ? "" : "cursor-grab active:cursor-grabbing"} ${drag?.id === l.id ? "opacity-40" : ""}`}
                   >
-                    <div className="mb-1 text-sm font-medium leading-snug">{l.title}</div>
+                    <div className="mb-1 flex items-start justify-between gap-2">
+                      <div className="text-sm font-medium leading-snug">{l.title}</div>
+                      <Badge tone={PRIORITY_TONE[l.priority] ?? "slate"}>{PRIORITY_LABEL[l.priority] ?? l.priority}</Badge>
+                    </div>
                     <div className="text-xs text-slate-500">{l.client}</div>
                     <div className="mt-3 flex items-center justify-between text-xs">
                       <span className="font-medium text-slate-700">{idr(l.value)}</span>
@@ -159,6 +183,15 @@ export default function LeadKanban({ leads }: { leads: KanbanLead[] }) {
                       </span>
                       <span>{l.created}</span>
                     </div>
+                    {(() => {
+                      const d = now === null ? null : staleDays(l, now);
+                      return d === null ? null : (
+                        <div className="mt-2 flex items-center gap-1.5 rounded-md border border-red-300 bg-red-500/10 px-2 py-1 text-xs font-medium text-red-600" title={l.activities.length === 0 ? `Belum ada activity lebih dari ${STALE_DAYS} hari` : `Ada activity yang belum diproses lebih dari ${STALE_DAYS} hari`}>
+                          <AlertTriangle size={13} className="shrink-0" /> {l.activities.length === 0 ? `Perlu follow-up · belum ada activity ${d} hari` : `Perlu follow-up · activity tertunda ${d} hari`}
+                        </div>
+                      );
+                    })()}
+                    <CardActivities leadId={l.id} items={l.activities} />
                   </Link>
                 ))}
               </div>

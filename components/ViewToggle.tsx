@@ -1,17 +1,23 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Columns3, List } from "lucide-react";
+import { CalendarDays, Columns3, List } from "lucide-react";
 
-/** Toggle tampilan List / Kanban. Pilihan dibawa lewat URL (?view=). */
-export default function ViewToggle({ base, current }: { base: string; current: "list" | "kanban" }) {
+export type ViewMode = "list" | "kanban" | "calendar";
+const META: Record<ViewMode, { label: string; Icon: typeof List }> = { list: { label: "List", Icon: List }, kanban: { label: "Kanban", Icon: Columns3 }, calendar: { label: "Calendar", Icon: CalendarDays } };
+
+/** Toggle tampilan (List / Kanban / Calendar). Pilihan dibawa lewat URL (?view=). */
+export default function ViewToggle({ base, current, modes = ["list", "kanban"] }: { base: string; current: ViewMode; modes?: ViewMode[] }) {
   const router = useRouter();
-  const go = (v: "list" | "kanban") => {
+  const go = (v: ViewMode) => {
     if (v === current) return;
     router.push(`${base}?view=${v}`);
   };
-  const item = (v: "list" | "kanban", label: string, Icon: typeof List) => (
+  const item = (v: ViewMode) => {
+    const { label, Icon } = META[v];
+    return (
     <button
+      key={v}
       type="button"
       role="radio"
       aria-checked={current === v}
@@ -22,11 +28,11 @@ export default function ViewToggle({ base, current }: { base: string; current: "
     >
       <Icon size={15} /> {label}
     </button>
-  );
+    );
+  };
   return (
     <div role="radiogroup" aria-label="Tampilan" className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5">
-      {item("list", "List", List)}
-      {item("kanban", "Kanban", Columns3)}
+      {modes.map((m) => item(m))}
     </div>
   );
 }

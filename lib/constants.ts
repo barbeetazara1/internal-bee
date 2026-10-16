@@ -48,6 +48,8 @@ export const ROLE_OPTIONS = toOpts(ROLE_LABEL);
 export const LICENSE_OPTIONS: Option[] = LICENSE_TYPES.map((v) => ({ value: v, label: LICENSE_LABEL[v] }));
 export const TASK_STATUS_OPTIONS = toOpts(TASK_LABEL);
 export const PRIORITY_OPTIONS: Option[] = [{ value: "LOW", label: "Low" }, { value: "MEDIUM", label: "Medium" }, { value: "HIGH", label: "High" }];
+/** Warna chip prioritas lead / task. */
+export const PRIORITY_TONE: Record<string, "slate" | "amber" | "red"> = { LOW: "slate", MEDIUM: "amber", HIGH: "red" };
 export const ENV_OPTIONS: Option[] = [{ value: "PRODUCTION", label: "Production" }, { value: "SANDBOX", label: "Sandbox" }];
 export const PROJECT_STATUS_OPTIONS: Option[] = [{ value: "ACTIVE", label: "Active" }, { value: "ON_HOLD", label: "On Hold" }, { value: "COMPLETED", label: "Completed" }];
 

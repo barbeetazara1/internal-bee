@@ -4,6 +4,9 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { Alert, Breadcrumb, PageHeader, StatusBadge } from "@/components/ui";
+import LeadActivities from "@/components/LeadActivities";
+import MultiSelect from "@/components/MultiSelect";
+import { SALES_ROLES } from "@/lib/sales";
 import ChatterSection from "@/components/ChatterSection";
 import ConfirmButton from "@/components/ConfirmButton";
 import Select from "@/components/Select";
@@ -13,7 +16,7 @@ import LeadLines from "@/components/LeadLines";
 import Section from "@/components/Section";
 import LeadStatusProgress, { type Step } from "@/components/LeadStatusProgress";
 import { fmtDate } from "@/lib/format";
-import { LEAD_FINAL, LEAD_LABEL, LEAD_STATUSES, leadDetailLocked, leadProductsLocked, licenseTypeOf } from "@/lib/constants";
+import { LEAD_FINAL, LEAD_LABEL, LEAD_STATUSES, PRIORITY_OPTIONS, leadDetailLocked, leadProductsLocked, licenseTypeOf } from "@/lib/constants";
 import PaymentDialog from "@/components/PaymentDialog";
 import { closeWon, setLeadPayment, setLeadStatus, updateLead } from "@/app/actions/leads";
 
@@ -27,10 +30,17 @@ export default async function LeadDetail({ params, searchParams }: { params: Pro
   const sp = await searchParams;
   const lead = await prisma.lead.findUnique({ relationLoadStrategy: "join",
     where: { id },
-    include: { owner: true, products: { include: { product: true }, orderBy: { product: { code: "asc" } } }, client: true, project: true, _count: { select: { bills: true } } },
+    include: { owner: true, sales_persons: { select: { id: true, name: true } }, products: { include: { product: true }, orderBy: { product: { code: "asc" } } }, client: true, project: true, _count: { select: { bills: true } } },
   });
   if (!lead) notFound();
-  const events = await prisma.activity.findMany({ where: { record_type: "lead", record_id: id, kind: "EVENT", body: { startsWith: "Status changed" } }, orderBy: { created_at: "asc" } });
+  const [activities, actTypes, salesUsers, events, clients, products] = await Promise.all([
+    prisma.leadActivity.findMany({ where: { lead_id: id }, include: { type: true, created_by: { select: { name: true } }, sales_persons: { select: { id: true, name: true } } }, orderBy: { scheduled_at: "asc" } }),
+    prisma.activityType.findMany({ where: { is_active: true }, orderBy: [{ sort: "asc" }, { name: "asc" }] }),
+    prisma.user.findMany({ where: { is_active: true, role: { in: SALES_ROLES } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.activity.findMany({ where: { record_type: "lead", record_id: id, kind: "EVENT", body: { startsWith: "Status changed" } }, orderBy: { created_at: "asc" } }),
+    prisma.client.findMany({ orderBy: { name: "asc" } }),
+    prisma.product.findMany({ where: { is_active: true }, orderBy: { code: "asc" } }),
+  ]);
   const byLabel = Object.fromEntries(Object.entries(LEAD_LABEL).map(([k, v]) => [v, k]));
   const reachedAt: Record<string, Date> = { NEW: lead.created_at };
   let lostFrom: string | null = null;
@@ -54,11 +64,12 @@ export default async function LeadDetail({ params, searchParams }: { params: Pro
     return { status: st, label: LEAD_LABEL[st], state, date: reachedAt[st] ? fmtDate(reachedAt[st]) : null };
   });
   const isFinal = (LEAD_FINAL as readonly string[]).includes(lead.status);
+  const openActs = activities.filter((a) => a.stage === lead.status && a.status !== "DONE").length; // wajib selesai sebelum pindah tahap
+  const actDto = activities.map((a) => ({ id: a.id, title: a.title || a.type.name, location: a.location, type_id: a.type_id, duration: a.duration_minutes, sales: a.sales_persons, type: a.type.name, icon: a.type.icon, stage: a.stage, scheduled_at: a.scheduled_at.toISOString(), notes: a.notes, status: a.status, by: a.created_by.name }));
   const next = !isFinal && lead.status !== "NEGOTIATION" ? flow[flow.indexOf(lead.status) + 1] : null;
   const nextBlocked = !!next && noProductsFor(lead.products.length, next);
 
-  const clientOptions = (await prisma.client.findMany({ orderBy: { name: "asc" } })).map((c) => ({ value: c.id, label: c.name, contact_name: c.contact_name ?? "", email: c.email ?? "", phone: c.phone ?? "" }));
-  const products = await prisma.product.findMany({ where: { is_active: true }, orderBy: { code: "asc" } });
+  const clientOptions = clients.map((c) => ({ value: c.id, label: c.name, contact_name: c.contact_name ?? "", email: c.email ?? "", phone: c.phone ?? "" }));
   const locked = lead.status === "CLOSED_WON";
   const detailLocked = leadDetailLocked(lead.status);
   const productsLocked = leadProductsLocked(lead.status);
@@ -70,7 +81,7 @@ export default async function LeadDetail({ params, searchParams }: { params: Pro
   return (
     <RecordProvider listHref="/leads">
     <div>
-      <Breadcrumb items={[{ label: "Leads (CRM)", href: "/leads" }, { label: lead.title }]} />
+      <Breadcrumb items={[{ label: "Opportunities" }, { label: "Leads", href: "/leads" }, { label: lead.title }]} />
       <PageHeader title={lead.title} subtitle={`${lead.client.name} · owner ${lead.owner.name}`} />
       <RecordBar
         createHref="/leads/new"
@@ -85,8 +96,8 @@ export default async function LeadDetail({ params, searchParams }: { params: Pro
                     title={`Pindah ke ${LEAD_LABEL[next]}?`}
                     confirmLabel={`Ya, ${LEAD_LABEL[next]}`}
                     message="Status hanya bisa maju dan tidak bisa dikembalikan ke tahap sebelumnya."
-                    disabled={nextBlocked}
-                    tooltip={nextBlocked ? "Tambahkan minimal 1 produk dan Save sebelum lanjut ke tahap ini" : undefined}
+                    disabled={nextBlocked || openActs > 0}
+                    tooltip={openActs > 0 ? `Selesaikan ${openActs} activity di tahap ini dulu` : nextBlocked ? "Tambahkan minimal 1 produk dan Save sebelum lanjut ke tahap ini" : undefined}
                     className="btn"
                   >
                     → {LEAD_LABEL[next]}
@@ -100,6 +111,8 @@ export default async function LeadDetail({ params, searchParams }: { params: Pro
                   action={closeWon}
                   trigger="✓ Closed Won"
                   triggerClassName="btn border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-500"
+                  triggerDisabled={openActs > 0}
+                  triggerTitle={openActs > 0 ? `Selesaikan ${openActs} activity di tahap ini dulu` : undefined}
                   title="Tutup sebagai Closed Won?"
                   intro="Atur sistem pembayarannya. Setelah ditutup, sistem otomatis membuat Project beserta task board, API Key untuk tiap produk, dan Bills sesuai pilihan di bawah. Lead tidak bisa dikembalikan ke status sebelumnya."
                   confirmLabel="Ya, Closed Won"
@@ -140,25 +153,32 @@ export default async function LeadDetail({ params, searchParams }: { params: Pro
       )}
 
       <RecordForm action={updateLead} locked={detailLocked} className="fields-compact">
-        <Section title="Detail Lead" subtitle="Informasi peluang dan kontak">
-        <input type="hidden" name="id" value={lead.id} />
-        <div className="grid grid-cols-1 gap-x-6 gap-y-2 md:grid-cols-2">
-          {/* Kolom kiri, atas ke bawah */}
-          <div className="space-y-2">
-            <div><label className="label">Judul</label><input name="title" defaultValue={lead.title} className="input" /></div>
-            <div><label className="label">Client<span className="text-red-500"> *</span></label><ClientPicker options={clientOptions} defaultValue={lead.client_id} /></div>
-            <div><label className="label">Nama kontak<span className="text-red-500"> *</span></label><input name="contact_name" required defaultValue={lead.contact_name} className="input" /></div>
-            <div><label className="label">Email</label><input name="email" defaultValue={lead.email ?? ""} className="input" /></div>
-          </div>
-          {/* Kolom kanan, atas ke bawah */}
-          <div className="space-y-2">
-            <div><label className="label">Telepon<span className="text-red-500"> *</span></label><PhoneInput name="phone" required defaultValue={lead.phone ?? ""} className="input" /></div>
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+        <Section title="Detail Lead" subtitle="Peluang, prioritas, dan sumbernya">
+          <input type="hidden" name="id" value={lead.id} />
+          <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+            <div className="sm:col-span-2"><label className="label">Judul</label><input name="title" defaultValue={lead.title} className="input" /></div>
+            {/* Prioritas boleh diubah kapan saja selama lead belum ditutup, walau detail lain sudah terkunci */}
+            <div data-unlock={isFinal ? undefined : "1"}><label className="label">Prioritas</label><Select name="priority" options={PRIORITY_OPTIONS} defaultValue={lead.priority} /></div>
             <div><label className="label">Sumber</label><input name="source" defaultValue={lead.source ?? ""} className="input" /></div>
+            {/* Sales Person (many2many): boleh diubah kapan saja selama lead belum ditutup */}
+            <div className="sm:col-span-2" data-unlock={isFinal ? undefined : "1"}>
+              <label className="label">Sales Person</label>
+              <input type="hidden" name="sales_person_marker" value="1" />
+              <MultiSelect name="sales_person_ids" options={[...salesUsers, ...lead.sales_persons.filter((p) => !salesUsers.some((u) => u.id === p.id))].map((u) => ({ value: u.id, label: u.name }))} defaultValue={lead.sales_persons.map((u) => u.id)} placeholder="Pilih sales person…" />
+            </div>
+            <div className="sm:col-span-2"><label className="label">Catatan</label><textarea name="notes" defaultValue={lead.notes ?? ""} rows={3} className="input" /></div>
           </div>
-          {/* Paling bawah, selebar kartu */}
-          <div className="md:col-span-2"><label className="label">Catatan</label><textarea name="notes" defaultValue={lead.notes ?? ""} rows={2} className="input" /></div>
-        </div>
         </Section>
+        <Section title="Detail Client" subtitle="Client dan kontak yang dihubungi">
+          <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+            <div className="sm:col-span-2"><label className="label">Client<span className="text-red-500"> *</span></label><ClientPicker options={clientOptions} defaultValue={lead.client_id} /></div>
+            <div><label className="label">Nama kontak<span className="text-red-500"> *</span></label><input name="contact_name" required defaultValue={lead.contact_name} className="input" /></div>
+            <div><label className="label">Telepon<span className="text-red-500"> *</span></label><PhoneInput name="phone" required defaultValue={lead.phone ?? ""} className="input" /></div>
+            <div className="sm:col-span-2"><label className="label">Email</label><input name="email" defaultValue={lead.email ?? ""} className="input" /></div>
+          </div>
+        </Section>
+        </div>
       </RecordForm>
 
       <div className="mt-6">
@@ -170,6 +190,16 @@ export default async function LeadDetail({ params, searchParams }: { params: Pro
           products={productOptions}
         />
       </div>
+      <LeadActivities
+        leadId={lead.id}
+        currentStage={lead.status}
+        canAdd={!isFinal}
+        types={actTypes.map((t) => ({ id: t.id, name: t.name, icon: t.icon, needs_location: t.needs_location }))}
+        salesUsers={salesUsers}
+        leadSales={lead.sales_persons}
+        items={actDto.filter((a) => a.stage === lead.status)}
+        history={actDto.filter((a) => a.stage !== lead.status)}
+      />
       <ChatterSection type="lead" id={lead.id} label={lead.title} />
     </div>
     </RecordProvider>

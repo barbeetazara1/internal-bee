@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { closeLeadAsWon } from "../lib/automation";
 import { backfillActivities } from "../lib/activity";
+import { DEFAULT_ACTIVITY_TYPES } from "../lib/activity-types";
 
 const prisma = new PrismaClient();
 const DEV_PASSWORD = "BeeDev#2026";
@@ -26,6 +27,11 @@ async function main() {
   const wa = await prod("PROD-WA-01", "Internal Bee WhatsApp Gateway", "MONTHLY", 300, 8000000, "Kirim notifikasi & OTP via WhatsApp.");
   const pos = await prod("PROD-POS-01", "Internal Bee POS Suite", "ONE_TIME", 1200, 45000000, "Aplikasi kasir terintegrasi multi-cabang.");
   await prod("PROD-AI-01", "Internal Bee AI Assistant", "MONTHLY", 900, 25000000, "Chatbot & asisten AI untuk customer service.");
+
+  // Master Activity Type (idempoten: hanya menambah yang belum ada, tidak menimpa perubahan Super Admin)
+  for (const [i, t] of DEFAULT_ACTIVITY_TYPES.entries()) {
+    await prisma.activityType.upsert({ where: { name: t.name }, update: {}, create: { name: t.name, icon: t.icon, sort: i, needs_location: !!t.needs_location } });
+  }
 
   if ((await prisma.lead.count()) > 0) {
     await backfillActivities();

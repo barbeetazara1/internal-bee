@@ -5,7 +5,8 @@ import { Alert, CreateButton, PageHeader, StatusBadge, SummaryCards } from "@/co
 import DataTable, { type Col, type Row } from "@/components/DataTable";
 import LeadKanban from "@/components/LeadKanban";
 import ViewToggle from "@/components/ViewToggle";
-import { LEAD_LABEL, LEAD_STATUSES, licenseTypeOf } from "@/lib/constants";
+import { Badge } from "@/components/ui";
+import { LEAD_LABEL, LEAD_STATUSES, PRIORITY_OPTIONS, PRIORITY_TONE, licenseTypeOf } from "@/lib/constants";
 import { fmtDate, idr } from "@/lib/format";
 import { bulkDeleteLeads } from "@/app/actions/leads";
 
@@ -14,23 +15,29 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   // Default Kanban; List hanya jika dipilih lewat toggle (?view=list).
   const view: "list" | "kanban" = sp.view === "list" ? "list" : "kanban";
+  // Ringkasan dihitung dari semua lead (tidak terpengaruh filter status tampilan List); dijalankan paralel dengan daftar
+  const allP = prisma.lead.findMany({ select: { status: true, products: { select: { price: true, quantity: true } } } });
   const leads = await prisma.lead.findMany({ relationLoadStrategy: "join",
     where: view === "list" && sp.status ? { status: sp.status } : undefined,
     orderBy: { created_at: "desc" },
-    include: { owner: true, client: true, products: { include: { product: { select: { code: true, name: true } } } } },
+    include: { owner: true, client: true, products: { include: { product: { select: { code: true, name: true } } } }, activities: { include: { type: true }, orderBy: { scheduled_at: "asc" } } },
   });
 
+  const PRIORITY_LABEL: Record<string, string> = Object.fromEntries(PRIORITY_OPTIONS.map((o) => [o.value, o.label]));
   const columns: Col[] = [
     { key: "lead", label: "Lead" },
     { key: "client", label: "Client" },
     { key: "contact", label: "Kontak" },
     { key: "owner", label: "Owner" },
     { key: "value", label: "Nilai penawaran" },
+    { key: "priority", label: "Prioritas" },
+    { key: "activity", label: "Activity" },
     { key: "status", label: "Status" },
     { key: "created", label: "Dibuat" },
   ];
   const rows: Row[] = leads.map((l) => {
     const value = l.products.reduce((a, p) => a + Number(p.price) * p.quantity, 0);
+    const open = l.activities.filter((a) => a.status === "PLANNED");
     return {
       id: l.id,
       href: `/leads/${l.id}`,
@@ -40,21 +47,22 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
         contact: { text: `${l.contact_name} ${l.email ?? ""}`, node: <div>{l.contact_name}<div className="text-xs text-slate-500">{l.email}</div></div> },
         owner: { text: l.owner.name },
         value: { text: idr(value), node: <div>{idr(value)}<div className="text-xs text-slate-400">{l.products.length} produk</div></div> },
+        priority: { text: PRIORITY_LABEL[l.priority] ?? l.priority, node: <Badge tone={PRIORITY_TONE[l.priority] ?? "slate"}>{PRIORITY_LABEL[l.priority] ?? l.priority}</Badge> },
+        activity: { text: open.length ? `${open.length} terjadwal` : "—" },
         status: { text: LEAD_LABEL[l.status], node: <StatusBadge status={l.status} /> },
         created: { text: fmtDate(l.created_at) },
       },
     };
   });
 
-  // Ringkasan dihitung dari semua lead (tidak terpengaruh filter status tampilan List)
-  const all = await prisma.lead.findMany({ select: { status: true, products: { select: { price: true, quantity: true } } } });
+  const all = await allP;
   const valueOf = (l: (typeof all)[number]) => l.products.reduce((a, p) => a + Number(p.price) * p.quantity, 0);
   const open = all.filter((l) => !["CLOSED_WON", "CLOSED_LOST"].includes(l.status));
   const won = all.filter((l) => l.status === "CLOSED_WON").length;
   const lost = all.filter((l) => l.status === "CLOSED_LOST").length;
   return (
     <div>
-      <PageHeader title="Leads (CRM)" subtitle="Akuisisi lead, pemetaan produk, dan penutupan deal">
+      <PageHeader title="Leads" subtitle="Akuisisi lead, pemetaan produk, dan penutupan deal">
         <ViewToggle base="/leads" current={view} />
         <CreateButton href="/leads/new">Lead Baru</CreateButton>
       </PageHeader>
@@ -71,7 +79,11 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
         <LeadKanban
           leads={leads.map((l) => ({
             id: l.id, title: l.title, client: l.client.name, contact: l.contact_name, owner: l.owner.name, status: l.status,
-            value: l.products.reduce((a, p) => a + Number(p.price) * p.quantity, 0), products: l.products.length, created: fmtDate(l.created_at),
+            value: l.products.reduce((a, p) => a + Number(p.price) * p.quantity, 0), products: l.products.length, created: fmtDate(l.created_at), priority: l.priority,
+            // Acuan "kapan terakhir diproses" untuk lead tanpa activity di tahap ini: lead dibuat atau activity (tahap mana pun) terakhir selesai/dibuat
+            idle_since: new Date(Math.max(l.created_at.getTime(), ...l.activities.map((a) => (a.done_at ?? a.created_at).getTime()))).toISOString(),
+            // Activity pada tahap lead saat ini (yang ditampilkan di dropdown kartu)
+            activities: l.activities.filter((a) => a.stage === l.status).map((a) => ({ id: a.id, title: a.title || a.type.name, type: a.type.name, icon: a.type.icon, scheduled_at: a.scheduled_at.toISOString(), duration: a.duration_minutes, status: a.status })),
             lines: l.products.map((p) => ({ id: p.id, label: `${p.product.code} — ${p.product.name}`, price: Number(p.price), license_type: licenseTypeOf(p.license_months) })),
           }))}
         />

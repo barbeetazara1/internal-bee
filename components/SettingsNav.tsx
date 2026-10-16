@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Settings, Users, type LucideIcon } from "lucide-react";
+import { ListChecks, Settings, Users, type LucideIcon } from "lucide-react";
 
 const ITEMS: { href: string; label: string; icon: LucideIcon; roles?: string[] }[] = [
   { href: "/settings", label: "General", icon: Settings },
+  { href: "/settings/activity-types", label: "Activity Types", icon: ListChecks, roles: ["SUPER_ADMIN"] },
   { href: "/settings/users", label: "Users", icon: Users, roles: ["SUPER_ADMIN"] },
 ];
 

@@ -13,7 +13,16 @@ const ALL = ["SUPER_ADMIN", "SALES", "PROJECT"];
 const NAV: Item[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ALL },
   { href: "/products", label: "Product Catalog", icon: Boxes, roles: ALL, keywords: "produk katalog harga billing" },
-  { href: "/leads", label: "Leads (CRM)", icon: Target, roles: ["SUPER_ADMIN", "SALES"], keywords: "lead crm prospek penjualan sales deal kanban" },
+  {
+    label: "Opportunities",
+    icon: Target,
+    roles: ["SUPER_ADMIN", "SALES"],
+    keywords: "peluang crm penjualan sales prospek deal pipeline",
+    children: [
+      { href: "/leads", label: "Leads", keywords: "lead crm prospek penjualan sales deal kanban prioritas" },
+      { href: "/activities", label: "Activity", keywords: "activity aktivitas jadwal call meeting demo follow-up kunjungan tugas" },
+    ],
+  },
   { href: "/demo", label: "Demo", icon: MonitorPlay, roles: ALL, keywords: "demo trial coba percobaan sandbox permintaan" },
   {
     label: "Clients & License",

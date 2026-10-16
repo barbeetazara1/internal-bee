@@ -6,6 +6,7 @@ import { generateKey, type Env } from "./keys";
 import type { RevealedKey } from "./flash";
 import { logActivity } from "./activity";
 import { checkPlans, createBillsForLead } from "./billing";
+import { LEAD_LABEL } from "./constants";
 import type { PaymentPlan } from "./payment";
 
 const TASK_TEMPLATE = [
@@ -29,6 +30,9 @@ export async function closeLeadAsWon(leadId: string, userId: string, plans: Reco
   if (lead.status === "CLOSED_LOST") throw new Error("Lead yang sudah Closed Lost tidak bisa dibuka kembali");
   if (lead.status !== "NEGOTIATION") throw new Error("Closed Won hanya bisa dilakukan saat lead berada di tahap Negosiasi");
   if (lead.products.length === 0) throw new Error("Tambahkan minimal 1 produk ke lead sebelum Closed Won");
+
+  const openActs = await prisma.leadActivity.count({ where: { lead_id: leadId, stage: lead.status, status: { not: "DONE" } } });
+  if (openActs > 0) throw new Error(`Selesaikan semua activity pada tahap ${LEAD_LABEL[lead.status]} terlebih dahulu (${openActs} belum selesai)`);
 
   checkPlans(lead.products, plans);
 

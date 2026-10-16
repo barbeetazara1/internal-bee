@@ -21,6 +21,9 @@ model User {
   activities    Activity[]
   notifications Notification[]
   demos         Demo[]
+  leadActivities LeadActivity[] @relation("LeadActivityCreator")
+  leadsAsSales      Lead[]         @relation("LeadSalesPersons")
+  activitiesAsSales LeadActivity[] @relation("ActivitySalesPersons")
 }
 
 model Product {
@@ -51,6 +54,7 @@ model Lead {
   status       String        @default("NEW") // NEW | CONTACTED | QUALIFIED | PROPOSAL | NEGOTIATION | CLOSED_WON | CLOSED_LOST
   owner_id     String
   client_id    String
+  priority     String        @default("MEDIUM") // LOW | MEDIUM | HIGH
   closed_at    DateTime?
   created_at   DateTime      @default(now())
   owner        User          @relation(fields: [owner_id], references: [id])
@@ -58,6 +62,8 @@ model Lead {
   products     LeadProduct[]
   project      Project?
   bills        Bill[]
+  activities   LeadActivity[]
+  sales_persons User[]       @relation("LeadSalesPersons")
 
   @@index([client_id])
   @@index([owner_id])
@@ -279,4 +285,41 @@ model Bill {
   @@index([lead_id])
   @@index([api_key_id])
   @@index([product_id])
+}
+
+/// Master data jenis activity (Call, Meeting, Demo, …). Nilai awal diisi oleh seed; Super Admin bisa menambah/mengubah di Settings.
+model ActivityType {
+  id         String         @id @default(uuid())
+  name       String         @unique
+  icon       String         @default("phone") // kunci ikon (lihat lib/activity-types.ts)
+  needs_location Boolean    @default(false) // true = activity jenis ini wajib mengisi Lokasi detail (Meeting, Demo, Kunjungan, …)
+  sort       Int            @default(0)
+  is_active  Boolean        @default(true)
+  created_at DateTime       @default(now())
+  activities LeadActivity[]
+}
+
+/// Activity yang dilakukan pada sebuah lead di tahap (stage) tertentu: jadwal tanggal+waktu, catatan opsional, dan status.
+model LeadActivity {
+  id            String       @id @default(uuid())
+  lead_id       String
+  type_id       String
+  title         String? // judul singkat activity (kosong pada data lama → tampil nama jenisnya)
+  stage         String // status lead saat activity dibuat (NEW | CONTACTED | …)
+  scheduled_at  DateTime
+  location      String? // lokasi detail; wajib bila jenis activity needs_location
+  duration_minutes Int       @default(30) // lama activity dalam menit
+  notes         String?
+  status        String       @default("PLANNED") // PLANNED | DONE
+  done_at       DateTime?
+  created_by_id String
+  created_at    DateTime     @default(now())
+  lead          Lead         @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+  type          ActivityType @relation(fields: [type_id], references: [id])
+  created_by    User         @relation("LeadActivityCreator", fields: [created_by_id], references: [id])
+  sales_persons User[]       @relation("ActivitySalesPersons")
+
+  @@index([lead_id, stage])
+  @@index([status, scheduled_at])
+  @@index([type_id])
 }

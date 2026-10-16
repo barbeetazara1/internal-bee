@@ -38,10 +38,10 @@ function planOf(kind: PaymentKind, prev: PaymentPlan): PaymentPlan {
  * sama rata), One-time (penuh / DP), Bulanan (per bulan sebanyak x bulan).
  */
 export default function PaymentDialog({
-  leadId, lines, action, trigger, triggerClassName, title, intro, confirmLabel, open: controlledOpen, onClose,
+  leadId, lines, action, trigger, triggerClassName, triggerDisabled, triggerTitle, title, intro, confirmLabel, open: controlledOpen, onClose,
 }: {
   leadId: string; lines: PayLine[]; action: (fd: FormData) => void | Promise<void>;
-  trigger?: string; triggerClassName?: string; title: string; intro: string; confirmLabel: string;
+  trigger?: string; triggerClassName?: string; triggerDisabled?: boolean; triggerTitle?: string; title: string; intro: string; confirmLabel: string;
   /** Mode terkendali: modal dibuka/ditutup oleh pemanggil (tanpa tombol pemicu). */
   open?: boolean; onClose?: () => void;
 }) {
@@ -145,7 +145,7 @@ export default function PaymentDialog({
 
   return (
     <>
-      {!controlled && <button type="button" className={triggerClassName} onClick={() => setOpen(true)}>{trigger}</button>}
+      {!controlled && <button type="button" className={triggerClassName} disabled={triggerDisabled} title={triggerTitle} onClick={() => setOpen(true)}>{trigger}</button>}
       {modal && createPortal(modal, document.body)}
     </>
   );

@@ -10,10 +10,13 @@ import type { ActionResult } from "@/lib/result";
 import { diffFields, logActivity, purgeActivities } from "@/lib/activity";
 import { checkPlans, createBillsForLead } from "@/lib/billing";
 import type { PaymentPlan } from "@/lib/payment";
-import { LICENSE_TYPES, canMoveLead, LEAD_LABEL, LEAD_STATUSES, leadDetailLocked, leadProductsLocked, licenseMonths } from "@/lib/constants";
-import { idr } from "@/lib/format";
+import { LEAD_FINAL, LICENSE_TYPES, PRIORITY_OPTIONS, canMoveLead, LEAD_LABEL, LEAD_STATUSES, leadDetailLocked, leadProductsLocked, licenseMonths } from "@/lib/constants";
+import { fmtDateTime, idr } from "@/lib/format";
+import { allSalesPersons, idsFrom, parseDuration } from "@/lib/sales";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
+const PRIORITY_LABEL: Record<string, string> = Object.fromEntries(PRIORITY_OPTIONS.map((o) => [o.value, o.label]));
+const priorityOf = (fd: FormData, fallback = "MEDIUM") => (PRIORITY_OPTIONS.some((o) => o.value === str(fd, "priority")) ? str(fd, "priority") : fallback);
 const validPhone = (p: string | null) => !p || /^[0-9+()\-\s]+$/.test(p);
 
 
@@ -63,6 +66,30 @@ export async function createLead(fd: FormData): Promise<ActionResult> {
   const parsed = await resolveLines(str(fd, "lines"));
   if (!parsed.ok) return parsed;
 
+  const sales = idsFrom(fd);
+  if (!(await allSalesPersons(sales))) return { ok: false, message: "Choose valid sales persons" };
+
+  // Activity yang dijadwalkan sejak form lead baru (ikut tersimpan bersama lead, tahap Baru)
+  let drafts: { type_id: string; title?: string; scheduled_at: string; notes?: string; duration_minutes?: number; sales_ids?: string[]; location?: string }[] = [];
+  try {
+    drafts = str(fd, "activities") ? JSON.parse(str(fd, "activities")) : [];
+  } catch {
+    return { ok: false, message: "Invalid activities" };
+  }
+  const types = drafts.length ? await prisma.activityType.findMany({ where: { id: { in: drafts.map((d) => d.type_id) }, is_active: true } }) : [];
+  for (const d of drafts) {
+    if (!types.some((t) => t.id === d.type_id)) return { ok: false, message: "Choose an activity type" };
+    if (!d.title?.trim()) return { ok: false, message: "Enter an activity title" };
+    if (d.title.length > 120) return { ok: false, message: "Activity title is too long" };
+    if (Number.isNaN(new Date(d.scheduled_at).getTime())) return { ok: false, message: "Choose the activity date and time" };
+    if ((d.notes ?? "").length > 2000) return { ok: false, message: "Notes are too long" };
+    const needsLoc = types.find((t) => t.id === d.type_id)!.needs_location;
+    if (needsLoc && !d.location?.trim()) return { ok: false, message: "Enter the activity location" };
+    if ((d.location ?? "").length > 200) return { ok: false, message: "Location is too long" };
+    if (!parseDuration(d.duration_minutes)) return { ok: false, message: "Duration must be between 1 and 1440 minutes" };
+    if ((d.sales_ids ?? []).some((sid) => !sales.includes(sid))) return { ok: false, message: "Sales person must be one of the lead's sales persons" };
+  }
+
   const lead = await prisma.lead.create({
     data: {
       title: str(fd, "title") || `Peluang — ${client.name}`,
@@ -73,11 +100,19 @@ export async function createLead(fd: FormData): Promise<ActionResult> {
       source: str(fd, "source") || null,
       notes: str(fd, "notes") || null,
       owner_id: user.id,
+      priority: priorityOf(fd),
+      sales_persons: { connect: sales.map((sid) => ({ id: sid })) },
       products: { create: parsed.lines.map(({ id: _id, ...l }) => l) },
+      activities: { create: drafts.map((d) => ({ type_id: d.type_id, title: d.title!.trim(), stage: "NEW", scheduled_at: new Date(d.scheduled_at), duration_minutes: d.duration_minutes!, location: types.find((t) => t.id === d.type_id)!.needs_location ? d.location!.trim() : null, sales_persons: { connect: (d.sales_ids ?? []).map((sid) => ({ id: sid })) }, notes: d.notes?.trim() || null, created_by_id: user.id })) },
     },
   });
   await logActivity(prisma, { type: "lead", id: lead.id, kind: "CREATED", authorId: user.id, label: lead.title, body: `Client: ${client.name}${parsed.lines.length ? ` · ${parsed.lines.length} product(s) mapped` : ""}` });
+  for (const d of drafts) {
+    const t = types.find((x) => x.id === d.type_id)!;
+    await logActivity(prisma, { type: "lead", id: lead.id, kind: "EVENT", authorId: user.id, label: lead.title, body: `Activity scheduled: ${t.name}: ${d.title!.trim()} (${fmtDateTime(new Date(d.scheduled_at))}) at ${LEAD_LABEL.NEW}` });
+  }
   revalidatePath("/leads");
+  revalidatePath("/activities");
   return { ok: true, changed: true, message: "Data saved", redirectTo: `/leads/${lead.id}` };
 }
 
@@ -86,7 +121,7 @@ const describe = (price: number, m: number, env: string) => `${idr(price)} · ${
 export async function updateLead(fd: FormData): Promise<ActionResult> {
   const user = await requireRole("SUPER_ADMIN", "SALES");
   const id = str(fd, "id");
-  const cur = await prisma.lead.findUnique({ relationLoadStrategy: "join", where: { id }, include: { client: true, products: { include: { product: true } } } });
+  const cur = await prisma.lead.findUnique({ relationLoadStrategy: "join", where: { id }, include: { client: true, products: { include: { product: true } }, sales_persons: { select: { id: true, name: true } } } });
   if (!cur) return { ok: false, message: "Lead not found" };
   // Detail lead terkunci setelah status lewat "Baru": field yang terkirim diabaikan, hanya baris produk yang boleh berubah.
   const detailLocked = leadDetailLocked(cur.status);
@@ -111,6 +146,26 @@ export async function updateLead(fd: FormData): Promise<ActionResult> {
     };
     changes.push(...diffFields({ title: "Title", contact_name: "Contact", email: "Email", phone: "Phone", source: "Source", notes: "Notes" }, cur, data));
     if (cur.client_id !== picked.id) changes.unshift({ field: "Client", from: cur.client.name, to: picked.name });
+  }
+
+  // Prioritas: boleh diubah kapan saja selama lead belum ditutup (walau detail lain sudah terkunci).
+  let priority = cur.priority;
+  if (!(LEAD_FINAL as readonly string[]).includes(cur.status)) {
+    priority = priorityOf(fd, cur.priority);
+    if (priority !== cur.priority) changes.push({ field: "Priority", from: PRIORITY_LABEL[cur.priority] ?? cur.priority, to: PRIORITY_LABEL[priority] ?? priority });
+  }
+
+  // Sales Person (many2many): boleh diubah selama lead belum ditutup; activity yang memakai sales person yang dicabut ikut dilepas.
+  let salesSet: string[] | null = null;
+  if (!(LEAD_FINAL as readonly string[]).includes(cur.status) && fd.has("sales_person_marker")) {
+    const ids = idsFrom(fd);
+    if (!(await allSalesPersons(ids))) return { ok: false, message: "Choose valid sales persons" };
+    if ([...cur.sales_persons.map((u) => u.id)].sort().join() !== [...ids].sort().join()) {
+      salesSet = ids;
+      const names = (list: string[]) => (list.length ? list.join(", ") : "—");
+      const after = ids.length ? (await prisma.user.findMany({ where: { id: { in: ids } }, select: { name: true } })).map((u) => u.name) : [];
+      changes.push({ field: "Sales Person", from: names(cur.sales_persons.map((u) => u.name)), to: names(after) });
+    }
   }
 
   // Baris produk (dikirim bersama tombol Save). Lead Closed Won tidak boleh diubah produknya.
@@ -143,7 +198,13 @@ export async function updateLead(fd: FormData): Promise<ActionResult> {
 
   if (changes.length === 0) return { ok: true, changed: false, message: "No changes made" };
   await prisma.$transaction(async (tx) => {
-    await tx.lead.update({ where: { id }, data });
+    await tx.lead.update({ where: { id }, data: { ...data, priority, ...(salesSet ? { sales_persons: { set: salesSet.map((sid) => ({ id: sid })) } } : {}) } });
+    if (salesSet) {
+      for (const a of await tx.leadActivity.findMany({ where: { lead_id: id }, select: { id: true, sales_persons: { select: { id: true } } } })) {
+        const drop = a.sales_persons.filter((u) => !salesSet!.includes(u.id));
+        if (drop.length) await tx.leadActivity.update({ where: { id: a.id }, data: { sales_persons: { disconnect: drop.map((u) => ({ id: u.id })) } } });
+      }
+    }
     for (const op of ops) {
       if (op.kind === "delete") await tx.leadProduct.delete({ where: { id: op.id } });
       else if (op.kind === "update") await tx.leadProduct.update({ where: { id: op.id }, data: op.line! });
@@ -167,6 +228,11 @@ export async function setLeadStatus(fd: FormData) {
   if (!canMoveLead(lead.status, status)) redirect(`/leads/${id}?error=` + encodeURIComponent(`Status can only move forward — ${LEAD_LABEL[lead.status]} can't go back to ${LEAD_LABEL[status]}`));
   if (status !== "CLOSED_LOST" && (LEAD_STATUSES as readonly string[]).indexOf(status) >= 2 && (await prisma.leadProduct.count({ where: { lead_id: id } })) === 0) {
     redirect(`/leads/${id}?error=` + encodeURIComponent("Add at least one product (and Save) before moving to Qualified"));
+  }
+  // Pindah ke tahap berikutnya hanya boleh bila semua activity di tahap ini sudah selesai (Closed Lost dikecualikan: lead gagal tidak perlu menuntaskan sisa activity)
+  if (status !== "CLOSED_LOST") {
+    const open = await prisma.leadActivity.count({ where: { lead_id: id, stage: lead.status, status: { not: "DONE" } } });
+    if (open > 0) redirect(`/leads/${id}?error=` + encodeURIComponent(`Selesaikan semua activity pada tahap ${LEAD_LABEL[lead.status]} terlebih dahulu (${open} belum selesai)`));
   }
   await prisma.lead.update({ where: { id }, data: { status, closed_at: status === "CLOSED_LOST" ? new Date() : null } });
   await logActivity(prisma, { type: "lead", id, kind: "EVENT", authorId: user.id, label: lead.title, body: `Status changed: ${LEAD_LABEL[lead.status]} → ${LEAD_LABEL[status]}` });

@@ -85,7 +85,7 @@ export function RecordForm({ action, className, locked = false, children }: { ac
     if (editing) editedAt.current = Date.now();
     formRef.current?.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>("input:not([type=hidden]), select, textarea, button[data-select]").forEach((el) => {
       if (el.dataset.locked || el.closest("[data-locked-field]")) return;
-      el.disabled = locked || !editing;
+      el.disabled = (locked && !el.closest("[data-unlock]")) || !editing; // [data-unlock]: tetap bisa diedit saat Edit walau form dikunci
     });
   }, [editing, locked, formRef]);
 

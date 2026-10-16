@@ -44,6 +44,9 @@
 .record-view .input { border-color: transparent; background-color: transparent; padding-left: 0; padding-right: 0; box-shadow: none; opacity: 1; color: rgb(var(--slate-800)); -webkit-text-fill-color: rgb(var(--slate-800)); appearance: none; resize: none; cursor: default; }
 .record-view .input::placeholder { color: transparent; }
 .record-view .select-chevron { display: none; }
+/* Pilihan banyak yang kosong tampil "—" (bukan teks placeholder) di mode baca */
+.record-view .ms-empty { font-size: 0; }
+.record-view .ms-empty::after { content: "—"; font-size: 0.875rem; color: rgb(var(--slate-800)); }
 .record-view .money-prefix { left: 0; }
 .record-view .money-input { padding-left: 1.6rem; }
 .record-view button[data-select] > span { color: rgb(var(--slate-800)); }
