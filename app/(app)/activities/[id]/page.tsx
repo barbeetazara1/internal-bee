@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { Badge, Breadcrumb, PageHeader } from "@/components/ui";
+import ChatterSection from "@/components/ChatterSection";
 import DatePicker from "@/components/DatePicker";
 import Section from "@/components/Section";
 import Select from "@/components/Select";
@@ -77,6 +78,7 @@ export default async function ActivityDetail({ params }: { params: Promise<{ id:
             </Section>
           </div>
         </RecordForm>
+        <ChatterSection type="activity" id={a.id} label={title} />
       </div>
     </RecordProvider>
   );

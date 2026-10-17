@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
-import { logActivity } from "@/lib/activity";
+import { logActivity, purgeActivities } from "@/lib/activity";
 import { LEAD_FINAL, LEAD_LABEL } from "@/lib/constants";
 import { fmtDateTime } from "@/lib/format";
 import { allSalesPersons, idsFrom, parseDuration } from "@/lib/sales";
@@ -42,10 +42,11 @@ export async function createLeadActivity(fd: FormData): Promise<ActionResult> {
   const leadSales = new Set((await prisma.lead.findUnique({ where: { id: lead.id }, select: { sales_persons: { select: { id: true } } } }))!.sales_persons.map((u) => u.id));
   if (sales.some((id) => !leadSales.has(id))) return { ok: false, message: "Sales person must be one of the lead's sales persons" };
 
-  await prisma.leadActivity.create({
+  const created = await prisma.leadActivity.create({
     data: { lead_id: lead.id, type_id: type.id, title, stage: lead.status, scheduled_at: when, duration_minutes: duration, location: type.needs_location ? location : null, notes: notes || null, created_by_id: user.id, sales_persons: { connect: sales.map((id) => ({ id })) } },
   });
   await logActivity(prisma, { type: "lead", id: lead.id, kind: "EVENT", authorId: user.id, label: lead.title, body: `Activity scheduled: ${type.name}: ${title} (${fmtDateTime(when)}) at ${LEAD_LABEL[lead.status]}` });
+  await logActivity(prisma, { type: "activity", id: created.id, kind: "CREATED", authorId: user.id, label: title, body: `Lead: ${lead.title} · ${type.name} (${fmtDateTime(when)})` });
   refresh(lead.id);
   return { ok: true, changed: true, message: "Activity saved" };
 }
@@ -58,6 +59,7 @@ export async function setLeadActivityDone(id: string, done: boolean): Promise<Ac
   if ((a.status === "DONE") === done) return { ok: true, changed: false, message: "No changes made" };
   await prisma.leadActivity.update({ where: { id }, data: { status: done ? "DONE" : "PLANNED", done_at: done ? new Date() : null } });
   await logActivity(prisma, { type: "lead", id: a.lead_id, kind: "EVENT", authorId: user.id, label: a.lead.title, body: `Activity ${done ? "done" : "reopened"}: ${a.title || a.type.name}` });
+  await logActivity(prisma, { type: "activity", id, kind: "EVENT", authorId: user.id, label: a.title || a.type.name, body: `Status changed: ${done ? "Planned → Done" : "Done → Planned"}` });
   refresh(a.lead_id);
   return { ok: true, changed: true, message: done ? "Activity marked as done" : "Activity set back to planned" };
 }
@@ -67,6 +69,7 @@ export async function deleteLeadActivities(ids: string[]): Promise<ActionResult>
   const found = await prisma.leadActivity.findMany({ where: { id: { in: ids } }, include: { lead: true, type: true } });
   if (found.length === 0) return { ok: false, message: "Activity not found" };
   await prisma.leadActivity.deleteMany({ where: { id: { in: found.map((a) => a.id) } } });
+  await purgeActivities("activity", found.map((a) => a.id));
   for (const a of found) {
     await logActivity(prisma, { type: "lead", id: a.lead_id, kind: "EVENT", authorId: user.id, label: a.lead.title, body: `Activity deleted: ${a.title || a.type.name}` });
     refresh(a.lead_id);
@@ -76,8 +79,10 @@ export async function deleteLeadActivities(ids: string[]): Promise<ActionResult>
 
 /** Bulk dari halaman Activity. */
 export async function bulkSetActivityDone(done: boolean, ids: string[]): Promise<ActionResult> {
-  await requireRole("SUPER_ADMIN", "SALES");
+  const user = await requireRole("SUPER_ADMIN", "SALES");
+  const targets = await prisma.leadActivity.findMany({ where: { id: { in: ids }, status: done ? "PLANNED" : "DONE" }, include: { type: true } });
   const { count } = await prisma.leadActivity.updateMany({ where: { id: { in: ids }, status: done ? "PLANNED" : "DONE" }, data: { status: done ? "DONE" : "PLANNED", done_at: done ? new Date() : null } });
+  for (const a of targets) await logActivity(prisma, { type: "activity", id: a.id, kind: "EVENT", authorId: user.id, label: a.title || a.type.name, body: `Status changed: ${done ? "Planned → Done" : "Done → Planned"}` });
   revalidatePath("/activities");
   revalidatePath("/leads");
   if (count === 0) return { ok: true, changed: false, message: "No changes made" };
@@ -130,6 +135,7 @@ export async function saveLeadActivity(fd: FormData): Promise<ActionResult> {
     data: { title, type_id: type.id, scheduled_at: when, duration_minutes: duration, location: type.needs_location ? location : null, notes: notes || null, sales_persons: { set: sales.map((sid) => ({ id: sid })) }, status, done_at: status === "DONE" ? (cur.status === "DONE" ? cur.done_at : new Date()) : null },
   });
   await logActivity(prisma, { type: "lead", id: cur.lead_id, kind: "EVENT", authorId: user.id, label: cur.lead.title, body: `Activity updated: ${title} — ${changes.join("; ")}` });
+  await logActivity(prisma, { type: "activity", id, kind: "EVENT", authorId: user.id, label: title, body: `Activity updated: ${title} — ${changes.join("; ")}` });
   refresh(cur.lead_id);
   revalidatePath(`/activities/${id}`);
   return { ok: true, changed: true, message: "Data saved" };

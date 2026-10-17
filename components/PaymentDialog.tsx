@@ -131,6 +131,7 @@ export default function PaymentDialog({
                     <tfoot><tr className="font-medium"><td colSpan={3} className="pt-2">Total ({rows.length} bill)</td><td className="pt-2 text-right">{idr(planTotal(p, l.price))}</td></tr></tfoot>
                   </table>
                 )}
+                {!err && rows.length > 1 && <p className="mt-2 text-xs text-slate-400">Hanya bill pertama yang dibuat sekarang; bill berikutnya dibuat satu per satu setelah bill sebelumnya dibayar.</p>}
               </div>
             );
           })}

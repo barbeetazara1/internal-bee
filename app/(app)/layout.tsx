@@ -2,11 +2,13 @@ import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { maybeRunBillingAlerts } from "@/lib/billing-alerts";
 import pkg from "@/package.json";
 import { recordLink, type RecordType } from "@/lib/activity";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
+  await maybeRunBillingAlerts(); // pengingat tagihan/layanan (dibatasi sekali per 30 menit)
   const rows = await prisma.notification.findMany({ relationLoadStrategy: "join",
     where: { user_id: user.id },
     orderBy: { created_at: "desc" },
@@ -19,6 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     author: n.activity.author.name,
     label: n.activity.record_label ?? "a record",
     snippet: n.activity.body ?? "",
+    alert: n.activity.kind === "ALERT",
     link: recordLink(n.activity.record_type as RecordType, n.activity.record_id),
     created_at: n.created_at.toISOString(),
   }));

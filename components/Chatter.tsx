@@ -9,7 +9,7 @@ import Section from "./Section";
 
 export type ActivityDTO = {
   id: string;
-  kind: "CREATED" | "UPDATED" | "EVENT" | "COMMENT";
+  kind: "CREATED" | "UPDATED" | "EVENT" | "COMMENT" | "ALERT";
   body: string | null;
   changes: Change[];
   mentions: { id: string; name: string }[];
@@ -128,6 +128,7 @@ export default function Chatter({ recordType, recordId, recordLabel, items, user
                   {a.kind === "CREATED" && <div className="font-medium">✨ Created this record</div>}
                   {a.kind === "UPDATED" && <div className="font-medium">✏️ Edited this record</div>}
                   {a.kind === "EVENT" && <div>{a.body}</div>}
+                  {a.kind === "ALERT" && <div className="rounded-md border border-red-300 bg-red-500/10 px-2 py-1.5 font-medium text-red-700">{a.body}</div>}
                   {a.kind === "CREATED" && a.body && <div className="mt-1 text-xs">{a.body}</div>}
                   {a.kind === "UPDATED" && a.changes.length > 0 && (
                     <ul className="mt-1.5 space-y-1 text-xs">

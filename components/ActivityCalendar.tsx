@@ -322,10 +322,12 @@ export default function ActivityCalendar({ items }: { items: ActivityRow[] }) {
           </div>
           <span className="w-full text-xs text-slate-500">{rangeCount} {countLabel}</span>
         </div>
-        {scale === "month" && monthView}
-        {scale === "week" && timeline(weekDays)}
-        {scale === "day" && timeline([selected])}
-        {scale === "year" && yearView}
+        <div key={scale} className="view-in">
+          {scale === "month" && monthView}
+          {scale === "week" && timeline(weekDays)}
+          {scale === "day" && timeline([selected])}
+          {scale === "year" && yearView}
+        </div>
       </section>
 
       <aside className="card overflow-hidden xl:sticky xl:top-20" aria-label={T.detail}>

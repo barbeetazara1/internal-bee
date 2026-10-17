@@ -9,6 +9,7 @@ import PhoneInput from "@/components/PhoneInput";
 import ChatterPlaceholder from "@/components/ChatterPlaceholder";
 import LeadActivities from "@/components/LeadActivities";
 import LeadLines from "@/components/LeadLines";
+import LeadAddons from "@/components/LeadAddons";
 import LeadStatusProgress from "@/components/LeadStatusProgress";
 import Section from "@/components/Section";
 import Select from "@/components/Select";
@@ -19,11 +20,12 @@ import { createLead } from "@/app/actions/leads";
 export default async function NewLead({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const me = await requireRole("SUPER_ADMIN", "SALES");
   const sp = await searchParams;
-  const [clients, products, salesUsers, actTypes] = await Promise.all([
+  const [clients, products, salesUsers, actTypes, addonCatalog] = await Promise.all([
     prisma.client.findMany({ orderBy: { name: "asc" } }),
     prisma.product.findMany({ where: { is_active: true }, orderBy: { code: "asc" } }),
     prisma.user.findMany({ where: { is_active: true, role: { in: SALES_ROLES } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.activityType.findMany({ where: { is_active: true }, orderBy: [{ sort: "asc" }, { name: "asc" }] }),
+    prisma.addon.findMany({ where: { is_active: true }, orderBy: [{ sort: "asc" }, { name: "asc" }] }),
   ]);
   const productOptions = products.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, price: Number(p.base_price), license_type: p.license_type }));
   // Status awal lead baru: tahap "Baru"; tahap lain belum tercapai.
@@ -43,7 +45,7 @@ export default async function NewLead({ searchParams }: { searchParams: Promise<
       <RecordBar right={<LeadStatusProgress steps={steps} />} />
       {sp.error && <Alert>{sp.error}</Alert>}
       <RecordForm action={createLead} className="fields-compact">
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
         <Section title="Detail Lead" subtitle="Peluang, prioritas, dan sumbernya">
           <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
             <div className="sm:col-span-2"><label className="label">Judul peluang</label><input name="title" className="input" placeholder="(opsional — otomatis dari nama client)" /></div>
@@ -70,6 +72,9 @@ export default async function NewLead({ searchParams }: { searchParams: Promise<
 
       <div className="mt-6">
         <LeadLines initial={[]} products={productOptions} locked={false} />
+      </div>
+      <div className="mt-6">
+        <LeadAddons initial={[]} products={[]} locked={false} addons={addonCatalog.map((a) => ({ value: a.id, label: a.name, price: Number(a.price), billing: a.billing }))} />
       </div>
       <LeadActivities types={actTypes.map((t) => ({ id: t.id, name: t.name, icon: t.icon, needs_location: t.needs_location }))} salesUsers={salesUsers} />
       <ChatterPlaceholder />

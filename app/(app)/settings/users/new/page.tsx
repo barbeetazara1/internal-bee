@@ -3,6 +3,8 @@ import { requireRole } from "@/lib/auth";
 import { Alert, PageHeader , Breadcrumb } from "@/components/ui";
 import Section from "@/components/Section";
 import Select from "@/components/Select";
+import ChatterPlaceholder from "@/components/ChatterPlaceholder";
+import PasswordInput from "@/components/PasswordInput";
 import { ROLE_OPTIONS } from "@/lib/constants";
 import { createUser } from "@/app/actions/users";
 
@@ -21,13 +23,14 @@ export default async function NewUser({ searchParams }: { searchParams: Promise<
           <div className="grid grid-cols-1 gap-x-6 gap-y-2 md:grid-cols-3">
             <div><label className="label">Nama<span className="text-red-500"> *</span></label><input name="name" required className="input" /></div>
             <div><label className="label">Email<span className="text-red-500"> *</span></label><input name="email" type="email" required className="input" /></div>
-            <div><label className="label">Password<span className="text-red-500"> *</span> (min. 8 karakter)</label><input name="password" type="password" required minLength={8} autoComplete="new-password" className="input" /></div>
+            <div><label className="label">Password<span className="text-red-500"> *</span> (min. 8 karakter)</label><PasswordInput name="password" required minLength={8} autoComplete="new-password" /></div>
           </div>
         </Section>
         <Section title="Hak Akses" subtitle="Role menentukan menu dan aksi yang tersedia">
           <div className="max-w-sm"><label className="label">Role</label><Select name="role" options={ROLE_OPTIONS} defaultValue="SALES" /></div>
         </Section>
       </RecordForm>
+      <ChatterPlaceholder />
     </div>
     </RecordProvider>
   );

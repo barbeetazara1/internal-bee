@@ -1,11 +1,11 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 
-export type RecordType = "product" | "lead" | "client" | "project" | "license" | "demo" | "task" | "bill";
+export type RecordType = "product" | "lead" | "client" | "project" | "license" | "demo" | "task" | "bill" | "activity" | "activity_type" | "addon" | "user" | "service";
 export type Change = { field: string; from: string; to: string };
 type Db = Prisma.TransactionClient | typeof prisma;
 
-const BASE: Record<RecordType, string> = { product: "/products/", lead: "/leads/", client: "/clients/", project: "/projects/", license: "/licenses/", demo: "/demo/", task: "/tasks/", bill: "/bills/" };
+const BASE: Record<RecordType, string> = { product: "/products/", lead: "/leads/", client: "/clients/", project: "/projects/", license: "/licenses/", demo: "/demo/", task: "/tasks/", bill: "/bills/", activity: "/activities/", activity_type: "/settings/activity-types/", addon: "/products/addons/", user: "/settings/users/", service: "/services/" };
 export const recordLink = (type: RecordType, id: string) => BASE[type] + id;
 
 /** Role yang boleh melihat/mengomentari tiap tipe record (untuk daftar @mention & otorisasi). */
@@ -18,6 +18,11 @@ export const ACCESS: Record<RecordType, string[]> = {
   demo: ["SUPER_ADMIN", "SALES", "PROJECT"],
   task: ["SUPER_ADMIN", "SALES", "PROJECT"],
   bill: ["SUPER_ADMIN", "SALES"],
+  activity: ["SUPER_ADMIN", "SALES"],
+  activity_type: ["SUPER_ADMIN"],
+  addon: ["SUPER_ADMIN"],
+  user: ["SUPER_ADMIN"],
+  service: ["SUPER_ADMIN", "SALES", "PROJECT"],
 };
 
 /** Menghapus riwayat/komentar (dan notifikasinya) milik record yang dihapus. */
@@ -27,7 +32,7 @@ export async function purgeActivities(type: RecordType, ids: string[]) {
 
 export async function logActivity(
   db: Db,
-  a: { type: RecordType; id: string; kind: "CREATED" | "UPDATED" | "EVENT" | "COMMENT"; authorId: string; body?: string; changes?: Change[]; label?: string },
+  a: { type: RecordType; id: string; kind: "CREATED" | "UPDATED" | "EVENT" | "COMMENT" | "ALERT"; authorId: string; body?: string; changes?: Change[]; label?: string },
 ) {
   return db.activity.create({
     data: {
@@ -85,4 +90,20 @@ export async function backfillActivities() {
   for (const t of await prisma.task.findMany({ relationLoadStrategy: "join", include: { project: { include: { lead: true } } } })) {
     if (!tHas.has(t.id)) await mk("task", t.id, t.project.lead?.owner_id ?? admin.id, t.created_at, t.title, t.project.lead ? "Created automatically from the project task template" : undefined);
   }
+}
+
+/**
+ * Record jenis baru (activity, activity type, add-on, user) yang dibuat sebelum riwayat diaktifkan belum punya entri "Created".
+ * Dipanggil saat riwayat dibuka: bila kosong, dibuatkan satu entri Created (tanggal = tanggal record dibuat). Aman diulang.
+ */
+export async function ensureCreatedEntry(type: RecordType, id: string, fallbackAuthorId: string) {
+  if (await prisma.activity.count({ where: { record_type: type, record_id: id } })) return;
+  let at: Date | null = null, author = fallbackAuthorId, label: string | null = null;
+  if (type === "activity") { const a = await prisma.leadActivity.findUnique({ where: { id }, include: { type: true } }); if (a) { at = a.created_at; author = a.created_by_id; label = a.title || a.type.name; } }
+  else if (type === "activity_type") { const a = await prisma.activityType.findUnique({ where: { id } }); if (a) { at = a.created_at; label = a.name; } }
+  else if (type === "addon") { const a = await prisma.addon.findUnique({ where: { id } }); if (a) { at = a.created_at; label = a.name; } }
+  else if (type === "service") { const a = await prisma.service.findUnique({ where: { id } }); if (a) { at = a.created_at; label = a.name; } }
+  else if (type === "user") { const a = await prisma.user.findUnique({ where: { id } }); if (a) { at = a.created_at; author = a.id; label = a.name; } }
+  if (!at) return;
+  await prisma.activity.create({ data: { record_type: type, record_id: id, kind: "CREATED", author_id: author, created_at: at, record_label: label } });
 }

@@ -12,6 +12,7 @@ import { checkPlans, createBillsForLead } from "@/lib/billing";
 import type { PaymentPlan } from "@/lib/payment";
 import { LEAD_FINAL, LICENSE_TYPES, PRIORITY_OPTIONS, canMoveLead, LEAD_LABEL, LEAD_STATUSES, leadDetailLocked, leadProductsLocked, licenseMonths } from "@/lib/constants";
 import { fmtDateTime, idr } from "@/lib/format";
+import { describeAddon, resolveAddons, type ResolvedAddon as ResolvedAddonLine } from "@/lib/lead-addons";
 import { allSalesPersons, idsFrom, parseDuration } from "@/lib/sales";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
@@ -65,6 +66,8 @@ export async function createLead(fd: FormData): Promise<ActionResult> {
   if (!validPhone(str(fd, "phone"))) return { ok: false, message: "Phone may only contain digits and + ( ) -" };
   const parsed = await resolveLines(str(fd, "lines"));
   if (!parsed.ok) return parsed;
+  const addonsParsed = await resolveAddons(str(fd, "addons"), []); // lead baru belum punya produk tersimpan → add-on berlaku untuk semua produk
+  if (!addonsParsed.ok) return addonsParsed;
 
   const sales = idsFrom(fd);
   if (!(await allSalesPersons(sales))) return { ok: false, message: "Choose valid sales persons" };
@@ -103,6 +106,7 @@ export async function createLead(fd: FormData): Promise<ActionResult> {
       priority: priorityOf(fd),
       sales_persons: { connect: sales.map((sid) => ({ id: sid })) },
       products: { create: parsed.lines.map(({ id: _id, ...l }) => l) },
+      addons: { create: addonsParsed.lines.map(({ id: _id, ...l }) => l) },
       activities: { create: drafts.map((d) => ({ type_id: d.type_id, title: d.title!.trim(), stage: "NEW", scheduled_at: new Date(d.scheduled_at), duration_minutes: d.duration_minutes!, location: types.find((t) => t.id === d.type_id)!.needs_location ? d.location!.trim() : null, sales_persons: { connect: (d.sales_ids ?? []).map((sid) => ({ id: sid })) }, notes: d.notes?.trim() || null, created_by_id: user.id })) },
     },
   });
@@ -121,7 +125,7 @@ const describe = (price: number, m: number, env: string) => `${idr(price)} · ${
 export async function updateLead(fd: FormData): Promise<ActionResult> {
   const user = await requireRole("SUPER_ADMIN", "SALES");
   const id = str(fd, "id");
-  const cur = await prisma.lead.findUnique({ relationLoadStrategy: "join", where: { id }, include: { client: true, products: { include: { product: true } }, sales_persons: { select: { id: true, name: true } } } });
+  const cur = await prisma.lead.findUnique({ relationLoadStrategy: "join", where: { id }, include: { client: true, products: { include: { product: true } }, addons: { include: { addon: true } }, sales_persons: { select: { id: true, name: true } } } });
   if (!cur) return { ok: false, message: "Lead not found" };
   // Detail lead terkunci setelah status lewat "Baru": field yang terkirim diabaikan, hanya baris produk yang boleh berubah.
   const detailLocked = leadDetailLocked(cur.status);
@@ -196,6 +200,34 @@ export async function updateLead(fd: FormData): Promise<ActionResult> {
     }
   }
 
+  // Add-on (dikirim bersama tombol Save; terkunci bersama produk setelah lead ditutup)
+  type AddonOp = { kind: "create" | "update" | "delete"; id?: string; line?: ResolvedAddonLine };
+  const addonOps: AddonOp[] = [];
+  if (fd.has("addons") && !leadProductsLocked(cur.status)) {
+    const resolved = await resolveAddons(str(fd, "addons"), cur.products.map((p) => p.product_id));
+    if (!resolved.ok) return resolved;
+    const catalog = await prisma.addon.findMany({ where: { id: { in: resolved.lines.map((l) => l.addon_id) } } });
+    const aname = (aid: string) => catalog.find((x) => x.id === aid)?.name ?? cur.addons.find((x) => x.addon_id === aid)?.addon.name ?? aid;
+    const keep = new Set(resolved.lines.filter((l) => l.id).map((l) => l.id));
+    const desc = (a: { price: unknown; quantity: number; billing: string; periods: number; client_managed: boolean }) => describeAddon({ price: Number(a.price), quantity: a.quantity, billing: a.billing, periods: a.periods, client_managed: a.client_managed });
+    for (const old of cur.addons) {
+      if (!keep.has(old.id)) {
+        addonOps.push({ kind: "delete", id: old.id });
+        changes.push({ field: `Add-on ${old.addon.name}`, from: desc(old), to: "removed" });
+      }
+    }
+    for (const l of resolved.lines) {
+      const old = cur.addons.find((x) => x.id === l.id);
+      if (!old) {
+        addonOps.push({ kind: "create", line: l });
+        changes.push({ field: `Add-on ${aname(l.addon_id)}`, from: "—", to: desc(l) });
+      } else if (old.addon_id !== l.addon_id || old.quantity !== l.quantity || Number(old.price) !== l.price || old.billing !== l.billing || old.periods !== l.periods || old.client_managed !== l.client_managed || (old.product_id ?? null) !== l.product_id) {
+        addonOps.push({ kind: "update", id: old.id, line: l });
+        changes.push({ field: `Add-on ${aname(l.addon_id)}`, from: desc(old), to: desc(l) });
+      }
+    }
+  }
+
   if (changes.length === 0) return { ok: true, changed: false, message: "No changes made" };
   await prisma.$transaction(async (tx) => {
     await tx.lead.update({ where: { id }, data: { ...data, priority, ...(salesSet ? { sales_persons: { set: salesSet.map((sid) => ({ id: sid })) } } : {}) } });
@@ -210,6 +242,11 @@ export async function updateLead(fd: FormData): Promise<ActionResult> {
       else if (op.kind === "update") await tx.leadProduct.update({ where: { id: op.id }, data: op.line! });
     }
     for (const op of ops) if (op.kind === "create") await tx.leadProduct.create({ data: { lead_id: id, ...op.line! } });
+    for (const op of addonOps) {
+      if (op.kind === "delete") await tx.leadAddon.delete({ where: { id: op.id } });
+      else if (op.kind === "update") { const { id: _id, ...d } = op.line!; await tx.leadAddon.update({ where: { id: op.id }, data: d }); }
+    }
+    for (const op of addonOps) if (op.kind === "create") { const { id: _id, ...d } = op.line!; await tx.leadAddon.create({ data: { lead_id: id, ...d } }); }
     await logActivity(tx, { type: "lead", id, kind: "UPDATED", authorId: user.id, label: data.title, changes });
   }, { maxWait: 15000, timeout: 60000 });
   revalidatePath(`/leads/${id}`);
@@ -279,10 +316,12 @@ export async function closeWon(fd: FormData) {
   const user = await requireRole("SUPER_ADMIN", "SALES");
   const id = str(fd, "id");
   let licenseId: string;
+  let projectId: string | null;
   try {
     const res = await closeLeadAsWon(id, user.id, parsePlans(fd));
     await setKeyFlash(res.revealed);
     licenseId = res.licenseIds[0];
+    projectId = res.projectId;
   } catch (e) {
     redirect(`/leads/${id}?error=` + encodeURIComponent((e as Error).message));
   }
@@ -290,8 +329,8 @@ export async function closeWon(fd: FormData) {
   revalidatePath("/clients");
   revalidatePath("/projects");
   revalidatePath("/licenses");
-  // Langsung ke form license milik client terkait; semua key baru tampil sekali di bagian atasnya.
-  redirect(`/licenses/${licenseId}?won=1`);
+  // Langsung ke project hasil otomatisasi; semua API key baru tampil sekali di bagian atasnya.
+  redirect(projectId ? `/projects/${projectId}?won=1` : `/licenses/${licenseId}?won=1`);
 }
 
 /** Lead hanya boleh dihapus selama statusnya "Baru". */
@@ -300,8 +339,10 @@ export async function bulkDeleteLeads(ids: string[]): Promise<ActionResult> {
   const found = await prisma.lead.findMany({ where: { id: { in: ids } }, select: { id: true, status: true } });
   const okIds = found.filter((l) => l.status === "NEW").map((l) => l.id);
   const skipped = found.length - okIds.length;
+  const actIds = (await prisma.leadActivity.findMany({ where: { lead_id: { in: okIds } }, select: { id: true } })).map((a) => a.id);
   await prisma.lead.deleteMany({ where: { id: { in: okIds } } });
   await purgeActivities("lead", okIds);
+  await purgeActivities("activity", actIds);
   revalidatePath("/leads");
   if (okIds.length === 0) return { ok: false, message: `Can't delete: only leads with status "Baru" can be deleted` };
   return { ok: true, changed: true, message: `${okIds.length} lead(s) deleted${skipped ? ` · ${skipped} skipped (status is not "Baru")` : ""}` };

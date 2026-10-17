@@ -27,7 +27,7 @@ export const PAYMENT_KINDS_FOR: Record<string, readonly PaymentKind[]> = {
 };
 export const PAYMENT_KIND_LABEL: Record<PaymentKind, string> = { FULL: "Bayar Penuh", DP: "DP + Cicilan", INSTALLMENT: "Cicilan Sama Rata", MONTHLY: "Per Bulan" };
 /** Jenis tiap bill hasil jadwal. */
-export const BILL_KIND_LABEL: Record<string, string> = { FULL: "Bayar Penuh", DP: "DP", INSTALLMENT: "Cicilan", MONTHLY: "Per Bulan" };
+export const BILL_KIND_LABEL: Record<string, string> = { FULL: "Bayar Penuh", DP: "DP", INSTALLMENT: "Cicilan", MONTHLY: "Per Bulan", ADDON: "Add-on" };
 export const INTERVALS = [1, 2, 3, 6, 12] as const;
 export const MAX_PERIODS = 60;
 

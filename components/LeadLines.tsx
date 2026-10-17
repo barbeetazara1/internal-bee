@@ -70,13 +70,13 @@ export default function LeadLines({ initial, products, locked, lockedNote }: { i
         <table className="w-full">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">Produk</th><th className="th">Tipe Lisensi</th><th className="th">Harga</th><th className="th">Env</th>
+              <th className="th">Produk</th><th className="th">Tipe Lisensi</th><th className="th">Expected Price</th><th className="th">Harga</th><th className="th">Env</th>
               {canEdit && <th className="th w-10" />}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {lines.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">{canEdit ? "Belum ada produk. Klik “Tambah Produk”." : "Belum ada produk."}</td></tr>
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">{canEdit ? "Belum ada produk. Klik “Tambah Produk”." : "Belum ada produk."}</td></tr>
             )}
             {lines.map((l) => {
               const m = meta(l.product_id);
@@ -92,11 +92,13 @@ export default function LeadLines({ initial, products, locked, lockedNote }: { i
                   {canEdit ? (
                     <>
                       <td className="td min-w-40"><Select key={`${l.key}-${l.product_id}`} options={LICENSE_OPTS} defaultValue={l.license_type} onChange={(v) => set(l.key, { license_type: v })} /></td>
+                      <td className="td min-w-40 whitespace-nowrap text-slate-500" title="Harga dari katalog produk (hanya baca)">{m ? idr(m.price) : "—"}</td>
                       <td className="td min-w-44"><MoneyInput key={`${l.key}-${l.product_id}`} defaultValue={l.price} onChange={(d) => set(l.key, { price: Number(d || 0) })} /></td>
                     </>
                   ) : (
                     <>
                       <td className="td">{m ? LICENSE_LABEL[l.license_type] ?? l.license_type : "—"}</td>
+                      <td className="td whitespace-nowrap text-slate-500" title="Harga dari katalog produk (hanya baca)">{m ? idr(m.price) : "—"}</td>
                       <td className="td font-medium">{m || l.price ? idr(l.price) : "—"}</td>
                     </>
                   )}

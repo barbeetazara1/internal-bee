@@ -14,6 +14,11 @@ async function labelOf(type: RecordType, id: string): Promise<string | null> {
     case "project": return (await prisma.project.findUnique({ where: { id } }))?.name ?? null;
     case "task": return (await prisma.task.findUnique({ where: { id } }))?.title ?? null;
     case "bill": return (await prisma.bill.findUnique({ where: { id } }))?.code ?? null;
+    case "activity": { const a = await prisma.leadActivity.findUnique({ where: { id }, include: { type: true } }); return a ? a.title || a.type.name : null; }
+    case "activity_type": return (await prisma.activityType.findUnique({ where: { id } }))?.name ?? null;
+    case "addon": return (await prisma.addon.findUnique({ where: { id } }))?.name ?? null;
+    case "service": return (await prisma.service.findUnique({ where: { id } }))?.name ?? null;
+    case "user": return (await prisma.user.findUnique({ where: { id } }))?.name ?? null;
     case "demo": {
       const d = await prisma.demo.findUnique({ relationLoadStrategy: "join", where: { id }, include: { client: true } });
       return d ? `${d.code} — ${d.client.name}` : null;

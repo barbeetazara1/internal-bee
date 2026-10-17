@@ -6,6 +6,7 @@ import DataTable, { type Col, type Row } from "@/components/DataTable";
 import LeadKanban from "@/components/LeadKanban";
 import ViewToggle from "@/components/ViewToggle";
 import { Badge } from "@/components/ui";
+import { addonTotal } from "@/lib/addons";
 import { LEAD_LABEL, LEAD_STATUSES, PRIORITY_OPTIONS, PRIORITY_TONE, licenseTypeOf } from "@/lib/constants";
 import { fmtDate, idr } from "@/lib/format";
 import { bulkDeleteLeads } from "@/app/actions/leads";
@@ -16,11 +17,11 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   // Default Kanban; List hanya jika dipilih lewat toggle (?view=list).
   const view: "list" | "kanban" = sp.view === "list" ? "list" : "kanban";
   // Ringkasan dihitung dari semua lead (tidak terpengaruh filter status tampilan List); dijalankan paralel dengan daftar
-  const allP = prisma.lead.findMany({ select: { status: true, products: { select: { price: true, quantity: true } } } });
+  const allP = prisma.lead.findMany({ select: { status: true, products: { select: { price: true, quantity: true } }, addons: { select: { price: true, quantity: true, billing: true, periods: true, client_managed: true } } } });
   const leads = await prisma.lead.findMany({ relationLoadStrategy: "join",
     where: view === "list" && sp.status ? { status: sp.status } : undefined,
     orderBy: { created_at: "desc" },
-    include: { owner: true, client: true, products: { include: { product: { select: { code: true, name: true } } } }, activities: { include: { type: true }, orderBy: { scheduled_at: "asc" } } },
+    include: { owner: true, client: true, addons: true, products: { include: { product: { select: { code: true, name: true } } } }, activities: { include: { type: true }, orderBy: { scheduled_at: "asc" } } },
   });
 
   const PRIORITY_LABEL: Record<string, string> = Object.fromEntries(PRIORITY_OPTIONS.map((o) => [o.value, o.label]));
@@ -36,7 +37,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
     { key: "created", label: "Dibuat" },
   ];
   const rows: Row[] = leads.map((l) => {
-    const value = l.products.reduce((a, p) => a + Number(p.price) * p.quantity, 0);
+    const value = l.products.reduce((a, p) => a + Number(p.price) * p.quantity, 0) + l.addons.reduce((a, x) => a + addonTotal(x), 0); // produk + add-on berbayar (sama dengan Total Keseluruhan di proposal)
     const open = l.activities.filter((a) => a.status === "PLANNED");
     return {
       id: l.id,
@@ -46,7 +47,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
         client: { text: l.client.name },
         contact: { text: `${l.contact_name} ${l.email ?? ""}`, node: <div>{l.contact_name}<div className="text-xs text-slate-500">{l.email}</div></div> },
         owner: { text: l.owner.name },
-        value: { text: idr(value), node: <div>{idr(value)}<div className="text-xs text-slate-400">{l.products.length} produk</div></div> },
+        value: { text: idr(value), node: <div>{idr(value)}<div className="text-xs text-slate-400">{`${l.products.length} produk`}{l.addons.length > 0 && ` · ${l.addons.length} add-on`}</div></div> },
         priority: { text: PRIORITY_LABEL[l.priority] ?? l.priority, node: <Badge tone={PRIORITY_TONE[l.priority] ?? "slate"}>{PRIORITY_LABEL[l.priority] ?? l.priority}</Badge> },
         activity: { text: open.length ? `${open.length} terjadwal` : "—" },
         status: { text: LEAD_LABEL[l.status], node: <StatusBadge status={l.status} /> },
@@ -56,7 +57,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   });
 
   const all = await allP;
-  const valueOf = (l: (typeof all)[number]) => l.products.reduce((a, p) => a + Number(p.price) * p.quantity, 0);
+  const valueOf = (l: (typeof all)[number]) => l.products.reduce((a, p) => a + Number(p.price) * p.quantity, 0) + l.addons.reduce((a, x) => a + addonTotal(x), 0);
   const open = all.filter((l) => !["CLOSED_WON", "CLOSED_LOST"].includes(l.status));
   const won = all.filter((l) => l.status === "CLOSED_WON").length;
   const lost = all.filter((l) => l.status === "CLOSED_LOST").length;
@@ -79,7 +80,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
         <LeadKanban
           leads={leads.map((l) => ({
             id: l.id, title: l.title, client: l.client.name, contact: l.contact_name, owner: l.owner.name, status: l.status,
-            value: l.products.reduce((a, p) => a + Number(p.price) * p.quantity, 0), products: l.products.length, created: fmtDate(l.created_at), priority: l.priority,
+            value: l.products.reduce((a, p) => a + Number(p.price) * p.quantity, 0) + l.addons.reduce((a, x) => a + addonTotal(x), 0), product_value: l.products.reduce((a, p) => a + Number(p.price) * p.quantity, 0), addons: l.addons.length, addon_value: l.addons.reduce((a, x) => a + addonTotal(x), 0), products: l.products.length, created: fmtDate(l.created_at), priority: l.priority,
             // Acuan "kapan terakhir diproses" untuk lead tanpa activity di tahap ini: lead dibuat atau activity (tahap mana pun) terakhir selesai/dibuat
             idle_since: new Date(Math.max(l.created_at.getTime(), ...l.activities.map((a) => (a.done_at ?? a.created_at).getTime()))).toISOString(),
             // Activity pada tahap lead saat ini (yang ditampilkan di dropdown kartu)

@@ -5,17 +5,23 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireRole, requireUser } from "@/lib/auth";
+import { diffFields, logActivity, purgeActivities } from "@/lib/activity";
+import { ROLE_LABEL } from "@/lib/constants";
 import type { ActionResult } from "@/lib/result";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 
+const LABELS = { name: "Name", email: "Email", role: "Role", is_active: "Status" };
+const FMT = { role: (v: unknown) => ROLE_LABEL[String(v)] ?? String(v), is_active: (v: unknown) => (v ? "Active" : "Inactive") };
+
 export async function createUser(fd: FormData): Promise<ActionResult> {
-  await requireRole("SUPER_ADMIN");
+  const admin = await requireRole("SUPER_ADMIN");
   const email = str(fd, "email").toLowerCase();
   const password = str(fd, "password");
   if (!str(fd, "name") || !email || password.length < 8) return { ok: false, message: "Name, email and a password of at least 8 characters are required" };
   try {
     const u = await prisma.user.create({ data: { name: str(fd, "name"), email, role: str(fd, "role"), password_hash: await bcrypt.hash(password, 10) } });
+    await logActivity(prisma, { type: "user", id: u.id, kind: "CREATED", authorId: admin.id, label: u.name, body: `${u.email} · ${ROLE_LABEL[u.role] ?? u.role}` });
     revalidatePath("/settings/users");
     return { ok: true, changed: true, message: "Data saved", redirectTo: `/settings/users/${u.id}` };
   } catch {
@@ -40,6 +46,7 @@ export async function saveUser(fd: FormData): Promise<ActionResult> {
   if (!changed) return { ok: true, changed: false, message: "No changes made" };
   try {
     await prisma.user.update({ where: { id }, data: { name, email, role, is_active } });
+    await logActivity(prisma, { type: "user", id, kind: "UPDATED", authorId: me.id, label: name, changes: diffFields(LABELS, cur, { name, email, role, is_active }, FMT) });
   } catch {
     return { ok: false, message: "Email is already registered" };
   }
@@ -50,7 +57,9 @@ export async function saveUser(fd: FormData): Promise<ActionResult> {
 
 export async function bulkUserActive(active: boolean, ids: string[]) {
   const me = await requireRole("SUPER_ADMIN");
-  await prisma.user.updateMany({ where: { id: { in: ids.filter((i) => i !== me.id) } }, data: { is_active: active } });
+  const targets = await prisma.user.findMany({ where: { id: { in: ids.filter((i) => i !== me.id) }, is_active: !active }, select: { id: true, name: true } });
+  await prisma.user.updateMany({ where: { id: { in: targets.map((t) => t.id) } }, data: { is_active: active } });
+  for (const t of targets) await logActivity(prisma, { type: "user", id: t.id, kind: "UPDATED", authorId: me.id, label: t.name, changes: [{ field: "Status", from: active ? "Inactive" : "Active", to: active ? "Active" : "Inactive" }] });
   revalidatePath("/settings/users");
 }
 
@@ -68,6 +77,7 @@ export async function deleteUsers(ids: string[]): Promise<ActionResult> {
     await prisma.notification.deleteMany({ where: { user_id: id } });
     await prisma.task.updateMany({ where: { assignee_id: id }, data: { assignee_id: null } });
     await prisma.user.delete({ where: { id } });
+    await purgeActivities("user", [id]);
     deleted++;
   }
   revalidatePath("/settings/users");
@@ -86,5 +96,6 @@ export async function changePassword(userId: string, oldPassword: string, newPas
   if (!target) return { ok: false, message: "User not found" };
   if (!(await bcrypt.compare(oldPassword, target.password_hash))) return { ok: false, message: "Current password is incorrect" };
   await prisma.user.update({ where: { id: userId }, data: { password_hash: await bcrypt.hash(newPassword, 10) } });
+  await logActivity(prisma, { type: "user", id: userId, kind: "EVENT", authorId: me.id, label: target.name, body: "Password changed" });
   return { ok: true, changed: true, message: "Password changed" };
 }

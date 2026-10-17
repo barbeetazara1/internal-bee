@@ -12,9 +12,9 @@ const CARDS: { value: string; label: string; desc: string; Icon: LucideIcon }[] 
  * Pilihan tipe lisensi berbentuk kartu (radio). Memakai <input type="radio"> sungguhan supaya ikut
  * terkunci di mode baca dan ikut dikirim bersama form.
  */
-export default function LicenseTypeCards({ name = "license_type", value, onChange }: { name?: string; value: string; onChange: (v: string) => void }) {
+export default function LicenseTypeCards({ name = "license_type", value, onChange, ariaLabel = "Tipe lisensi" }: { name?: string; value: string; onChange: (v: string) => void; ariaLabel?: string }) {
   return (
-    <div role="radiogroup" aria-label="Tipe lisensi" className="grid grid-cols-1 gap-3 md:grid-cols-3">
+    <div role="radiogroup" aria-label={ariaLabel} className="grid grid-cols-1 gap-3 md:grid-cols-3">
       {CARDS.map(({ value: v, label, desc, Icon }) => (
         <label key={v} className="relative block cursor-pointer">
           <input type="radio" name={name} value={v} checked={value === v} onChange={() => onChange(v)} className="peer sr-only" />

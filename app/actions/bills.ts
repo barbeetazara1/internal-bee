@@ -1,5 +1,6 @@
 "use server";
 
+import { refreshService } from "@/lib/services";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { can, requireRole } from "@/lib/auth";
@@ -48,7 +49,9 @@ export async function changeBillStatus(fd: FormData) {
   if (!cur || status === "PAID" || !(NEXT[cur.status] ?? []).includes(status)) return; // lunas hanya lewat unggah bukti (/api/bills/[id]/proof)
   await prisma.bill.update({ where: { id }, data: { status, paid_at: null, proof_file: null, proof_name: null, proof_type: null, proof_size: null } });
   await removeProof(cur.proof_file);
+  await refreshService(prisma, cur.service_id);
   await logActivity(prisma, { type: "bill", id, kind: "EVENT", authorId: user.id, label: cur.code, body: `Status changed: ${BILL_LABEL[cur.status]} → ${BILL_LABEL[status]}` });
+  revalidatePath("/services");
   revalidatePath(`/bills/${id}`);
   revalidatePath("/bills");
 }

@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { ACCESS, type Change, type RecordType } from "@/lib/activity";
+import { ACCESS, ensureCreatedEntry, type Change, type RecordType } from "@/lib/activity";
 import Chatter, { type ActivityDTO } from "./Chatter";
 
 /** Footer riwayat & komentar untuk sebuah record. Dipasang di bawah form. */
 export default async function ChatterSection({ type, id, label }: { type: RecordType; id: string; label: string }) {
   const me = await requireUser();
+  if (type === "activity" || type === "activity_type" || type === "addon" || type === "user" || type === "service") await ensureCreatedEntry(type, id, me.id);
   const [rows, users] = await Promise.all([
     prisma.activity.findMany({ relationLoadStrategy: "join", where: { record_type: type, record_id: id }, orderBy: { created_at: "asc" }, include: { author: { select: { id: true, name: true } } } }),
     prisma.user.findMany({ where: { is_active: true, role: { in: ACCESS[type] } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),

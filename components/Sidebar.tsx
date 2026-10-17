@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Boxes, ChevronDown, ChevronLeft, ChevronRight, FolderKanban, KeyRound, LayoutDashboard, LineChart, MonitorPlay, Receipt, Search, Target, X, type LucideIcon } from "lucide-react";
+import { Boxes, ChevronDown, ChevronLeft, ChevronRight, FolderKanban, KeyRound, LayoutDashboard, LineChart, MonitorPlay, Receipt, Search, Server, Target, X, type LucideIcon } from "lucide-react";
 
 /** Menu: tautan (href) atau grup (children, bisa bersarang). keywords: kata lain yang ikut dicocokkan saat mencari. */
 type Node = { label: string; href?: string; keywords?: string; children?: Node[] };
@@ -12,7 +12,16 @@ type Item = Node & { icon: LucideIcon; roles: string[] };
 const ALL = ["SUPER_ADMIN", "SALES", "PROJECT"];
 const NAV: Item[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ALL },
-  { href: "/products", label: "Product Catalog", icon: Boxes, roles: ALL, keywords: "produk katalog harga billing" },
+  {
+    label: "Product Catalog",
+    icon: Boxes,
+    roles: ALL,
+    keywords: "produk katalog harga billing",
+    children: [
+      { href: "/products", label: "Products", keywords: "produk katalog harga lisensi software" },
+      { href: "/products/addons", label: "Add-ons", keywords: "addon tambahan hosting server domain ssl maintenance biaya berulang" },
+    ],
+  },
   {
     label: "Opportunities",
     icon: Target,
@@ -21,6 +30,19 @@ const NAV: Item[] = [
     children: [
       { href: "/leads", label: "Leads", keywords: "lead crm prospek penjualan sales deal kanban prioritas" },
       { href: "/activities", label: "Activity", keywords: "activity aktivitas jadwal call meeting demo follow-up kunjungan tugas" },
+    ],
+  },
+  {
+    label: "Services",
+    icon: Server,
+    roles: ALL,
+    keywords: "layanan server hosting domain ssl vps cloud masa aktif down berlangganan maintenance",
+    children: [
+      { href: "/services", label: "All Services", keywords: "semua layanan masa aktif down" },
+      { href: "/services/type/hosting", label: "Server / Hosting", keywords: "server hosting vps cloud" },
+      { href: "/services/type/domain", label: "Domain", keywords: "domain dns" },
+      { href: "/services/type/ssl", label: "SSL", keywords: "ssl sertifikat https" },
+      { href: "/services/type/maintenance", label: "Maintenance", keywords: "maintenance support perawatan" },
     ],
   },
   { href: "/demo", label: "Demo", icon: MonitorPlay, roles: ALL, keywords: "demo trial coba percobaan sandbox permintaan" },
@@ -49,6 +71,8 @@ const NAV: Item[] = [
 /** Halaman aktif. /licenses (Production) tidak ikut aktif saat berada di /licenses/demo. */
 const on = (path: string, href: string) => {
   if (href === "/licenses") return path === "/licenses" || (path.startsWith("/licenses/") && !path.startsWith("/licenses/demo"));
+  if (href === "/services") return path === "/services" || (path.startsWith("/services/") && !path.startsWith("/services/type/"));
+  if (href === "/products") return path === "/products" || (path.startsWith("/products/") && !path.startsWith("/products/addons"));
   return path === href || path.startsWith(href + "/");
 };
 const anyActive = (path: string, n: Node): boolean => (n.href ? on(path, n.href) : false) || !!n.children?.some((c) => anyActive(path, c));

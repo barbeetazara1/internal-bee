@@ -56,7 +56,7 @@ export default async function BillInvoice({ params, searchParams }: { params: Pr
           <thead><tr className="border-b-2 border-slate-800 text-left"><th className="py-2">Produk</th><th className="py-2">Pembayaran</th><th className="py-2 text-right">Jumlah</th></tr></thead>
           <tbody>
             <tr className="border-b border-slate-200">
-              <td className="py-2"><div className="font-medium">{b.product.name}</div><div className="text-xs text-slate-500">{b.product.code}</div></td>
+              <td className="py-2"><div className="font-medium">{b.addon_name ? `Add-on: ${b.addon_name}` : b.product.name}</div><div className="text-xs text-slate-500">{b.addon_name ? b.product.name : b.product.code}</div></td>
               <td className="py-2">
                 {BILL_KIND_LABEL[b.kind] ?? b.kind} · {b.period_no} dari {b.period_total}
                 {b.period_start && <div className="text-xs text-slate-500">{fmtDate(b.period_start)}{b.period_end ? ` – ${fmtDate(b.period_end)}` : ""}</div>}

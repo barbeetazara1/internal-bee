@@ -8,7 +8,12 @@ export default {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
-      fontFamily: { sans: ["ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"] },
+      fontFamily: {
+        // Satu huruf untuk semuanya: font-mono & font-display dipetakan ke huruf yang sama (angka dibuat rata lewat tabular-nums)
+        sans: ["var(--font-body)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        mono: ["var(--font-body)", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["var(--font-body)", "ui-sans-serif", "system-ui", "sans-serif"],
+      },
       colors: { slate, surface: v("surface") },
       // Teks ~1px lebih besar dari bawaan Tailwind di setiap tingkat.
       fontSize: {

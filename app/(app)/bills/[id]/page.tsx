@@ -80,7 +80,7 @@ export default async function BillDetail({ params, searchParams }: { params: Pro
               : [{ label: "Bills", href: "/bills" }, { label: b.code }]
           }
         />
-        <PageHeader title={b.code} subtitle={`${b.client.name} — ${b.product.name}`} />
+        <PageHeader title={b.code} subtitle={`${b.client.name} — ${b.addon_name ? `Add-on: ${b.addon_name}` : b.product.name}`} />
         {canEdit && b.status === "UNPAID" ? (
           <RecordBar extra={buttons} center={menu} right={<LeadStatusProgress steps={steps} />} />
         ) : (
@@ -94,10 +94,11 @@ export default async function BillDetail({ params, searchParams }: { params: Pro
               <Field label="Lead"><Link href={`/leads/${b.lead_id}`} className="hover:underline">{b.lead.title}</Link></Field>
               <Field label="Project">{b.project ? <Link href={`/projects/${b.project.id}`} className="hover:underline">{b.project.name}</Link> : "—"}</Field>
               <Field label="License">{b.api_key ? <Link href={`/licenses/${b.api_key.id}`} className="font-mono text-xs hover:underline">{b.api_key.prefix}••••{b.api_key.key_hint}</Link> : "—"}</Field>
-              <Field label="Produk">{b.product.name} <span className="font-mono text-xs text-slate-500">{b.product.code}</span></Field>
+              <Field label={b.addon_name ? "Add-on" : "Produk"}>{b.addon_name ? <>{b.addon_name} · </> : null}{b.product.name} <span className="font-mono text-xs text-slate-500">{b.product.code}</span></Field>
               <Field label="Jenis Pembayaran">{BILL_KIND_LABEL[b.kind] ?? b.kind}</Field>
               <Field label="Periode">{b.period_no} dari {b.period_total}{b.period_start ? ` · ${fmtDate(b.period_start)}${b.period_end ? ` – ${fmtDate(b.period_end)}` : ""}` : ""}</Field>
               <Field label="Status"><StatusBadge status={st} /></Field>
+              {b.service_id && <Field label="Layanan"><Link href={`/services/${b.service_id}`} className="hover:underline">Lihat masa aktif layanan</Link></Field>}
             </div>
           </Section>
         </div>

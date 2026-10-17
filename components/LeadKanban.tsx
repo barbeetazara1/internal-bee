@@ -14,7 +14,7 @@ import PaymentDialog, { type PayLine } from "./PaymentDialog";
 import CardActivities, { type CardActivity } from "./CardActivities";
 import { Badge } from "./ui";
 
-export type KanbanLead = { id: string; title: string; client: string; contact: string; owner: string; status: string; value: number; products: number; created: string; lines: PayLine[]; priority: string; idle_since: string; activities: CardActivity[] };
+export type KanbanLead = { id: string; title: string; client: string; contact: string; owner: string; status: string; value: number; product_value: number; addons: number; addon_value: number; products: number; created: string; lines: PayLine[]; priority: string; idle_since: string; activities: CardActivity[] };
 
 const FINAL = LEAD_FINAL as readonly string[];
 const ORDER = LEAD_STATUSES as readonly string[];
@@ -37,6 +37,8 @@ const DOT: Record<string, string> = {
   NEW: "bg-slate-400", CONTACTED: "bg-sky-500", QUALIFIED: "bg-violet-500", PROPOSAL: "bg-amber-500",
   NEGOTIATION: "bg-orange-500", CLOSED_WON: "bg-emerald-500", CLOSED_LOST: "bg-red-500",
 };
+/** Rupiah ringkas untuk baris kecil di kartu: 6,55 jt / 45 jt / 1,2 M. */
+const idrShort = (n: number) => (n >= 1e9 ? `Rp ${+(n / 1e9).toFixed(2)} M`.replace(".", ",") : n >= 1e6 ? `Rp ${+(n / 1e6).toFixed(2)} jt`.replace(".", ",") : `Rp ${n.toLocaleString("id-ID")}`);
 const STALE_DAYS = 3;
 /** Hari keterlambatan activity terlama yang belum selesai di tahap ini; null bila belum lewat batas STALE_DAYS (lead final tidak dihitung). */
 function staleDays(l: KanbanLead, now: number): number | null {
@@ -174,8 +176,14 @@ export default function LeadKanban({ leads }: { leads: KanbanLead[] }) {
                     <div className="text-xs text-slate-500">{l.client}</div>
                     <div className="mt-3 flex items-center justify-between text-xs">
                       <span className="font-medium text-slate-700">{idr(l.value)}</span>
-                      <span className="text-slate-400">{l.products} produk</span>
+                      <span className="text-slate-400">{`${l.products} produk`}{l.addons > 0 && ` · ${l.addons} add-on`}</span>
                     </div>
+                    {l.addons > 0 && (
+                      <div className="mt-1 flex items-center justify-between rounded-md bg-slate-100 px-2 py-1 text-[11px] text-slate-500" title="Rincian nilai lead: produk + add-on berbayar">
+                        <span>{`Produk ${idrShort(l.product_value)}`}</span>
+                        <span className="font-medium text-slate-600">{l.addon_value > 0 ? `+ Add-on ${idrShort(l.addon_value)}` : "Add-on dikelola client"}</span>
+                      </div>
+                    )}
                     <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
                       <span className="flex items-center gap-1.5">
                         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-400 text-[10px] font-bold text-slate-900" title={l.owner}>{initials(l.owner)}</span>

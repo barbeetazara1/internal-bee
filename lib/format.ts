@@ -17,3 +17,8 @@ export const addMonths = (d: Date, n: number) => {
   x.setMonth(x.getMonth() + n);
   return x;
 };
+
+/** Tanggal kalender (YYYY-MM-DD) di zona waktu Asia/Jakarta, konsisten dengan fmtDate. Dipakai untuk mengelompokkan "hari yang sama". */
+export const jktDay = (d: Date | string) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(d));
+/** Awal hari (00:00 WIB) untuk tanggal YYYY-MM-DD. */
+export const jktDayStart = (day: string) => new Date(`${day}T00:00:00+07:00`);

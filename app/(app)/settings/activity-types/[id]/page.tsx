@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { Breadcrumb, PageHeader } from "@/components/ui";
+import ChatterSection from "@/components/ChatterSection";
 import ActivityTypeFields from "@/components/ActivityTypeFields";
 import { RecordBar, RecordForm, RecordProvider } from "@/components/Record";
 import { saveActivityType } from "@/app/actions/activity-types";
@@ -21,6 +22,7 @@ export default async function ActivityTypeDetail({ params }: { params: Promise<{
           <input type="hidden" name="id" value={t.id} />
           <ActivityTypeFields t={{ name: t.name, icon: t.icon, sort: t.sort, is_active: t.is_active, needs_location: t.needs_location }} />
         </RecordForm>
+        <ChatterSection type="activity_type" id={t.id} label={t.name} />
       </div>
     </RecordProvider>
   );

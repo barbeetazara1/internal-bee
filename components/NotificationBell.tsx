@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { markAllNotificationsRead, markNotificationRead } from "@/app/actions/comments";
 
-export type NotificationDTO = { id: string; read: boolean; author: string; label: string; snippet: string; link: string; created_at: string };
+export type NotificationDTO = { id: string; read: boolean; author: string; label: string; snippet: string; alert?: boolean; link: string; created_at: string };
 
 const ago = (iso: string) => {
   const s = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
@@ -70,7 +70,7 @@ export default function NotificationBell({ items }: { items: NotificationDTO[] }
                   }}
                 >
                   <div className="text-sm text-slate-800">
-                    <b>{n.author}</b> mentioned you in <b>{n.label}</b>
+                    {n.alert ? <>Reminder: <b>{n.label}</b></> : <><b>{n.author}</b> mentioned you in <b>{n.label}</b></>}
                   </div>
                   <div className="mt-0.5 line-clamp-2 text-xs text-slate-500">{n.snippet}</div>
                   <div className="mt-1 text-xs text-slate-400">{ago(n.created_at)}</div>

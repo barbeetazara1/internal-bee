@@ -68,6 +68,8 @@ model Lead {
   @@index([client_id])
   @@index([owner_id])
   @@index([status, created_at])
+  addons LeadAddon[]
+  services Service[]
 }
 
 model LeadProduct {
@@ -105,6 +107,7 @@ model Client {
   apiKeys    ApiKey[]
   demos      Demo[]
   bills      Bill[]
+  services Service[]
 }
 
 model Project {
@@ -257,6 +260,10 @@ model Bill {
   project_id   String?
   api_key_id   String?
   product_id   String
+  addon_name   String? // terisi bila bill ini tagihan add-on (nama add-on saat dibuat)
+  service_id   String? // layanan (hosting/domain/SSL) yang ditagih bill ini; terisi untuk bill add-on
+  plan_key     String? // pengenal rencana tagihan berjenjang (semua bill satu rencana berbagi kunci yang sama)
+  plan         Json? // jadwal lengkap rencana: bill berikutnya dibuat satu per satu setelah bill sebelumnya dibayar
   kind         String    @default("INSTALLMENT") // FULL | DP | INSTALLMENT | MONTHLY — hasil sistem pembayaran yang dipilih saat Closed Won
   period_no    Int       @default(1)
   period_total Int       @default(1)
@@ -276,9 +283,12 @@ model Bill {
   lead         Lead      @relation(fields: [lead_id], references: [id])
   project      Project?  @relation(fields: [project_id], references: [id])
   api_key      ApiKey?   @relation(fields: [api_key_id], references: [id])
+  service      Service?  @relation(fields: [service_id], references: [id])
   product      Product   @relation(fields: [product_id], references: [id])
 
   @@index([status, due_date])
+  @@index([plan_key])
+  @@index([service_id])
 
   @@index([project_id])
   @@index([client_id])
@@ -322,4 +332,89 @@ model LeadActivity {
   @@index([lead_id, stage])
   @@index([status, scheduled_at])
   @@index([type_id])
+}
+
+/// Pengaturan template proposal (satu baris, id "default"): mode TEXT = teks yang dirender dengan desain bawaan, mode PDF = file PDF unggahan sendiri.
+model ProposalSetting {
+  id            String   @id @default("default")
+  mode          String   @default("TEXT") // TEXT | PDF
+  company_name  String?
+  tagline       String?
+  title         String?
+  intro         String?
+  scope         String?
+  terms         String?
+  closing       String?
+  signer_name   String?
+  signer_title  String?
+  validity_days Int      @default(14)
+  footer        String?
+  pdf_file      String? // rujukan penyimpanan (blob:… atau nama file lokal)
+  pdf_name      String?
+  pdf_size      Int?
+  updated_at    DateTime @updatedAt
+}
+
+/// Katalog add-on (biaya tambahan berulang/sekali bayar di luar produk): hosting/server, domain, SSL, maintenance, dst.
+model Addon {
+  id          String      @id @default(uuid())
+  name        String      @unique
+  kind        String      @default("HOSTING") // HOSTING | DOMAIN | SSL | MAINTENANCE | OTHER
+  billing     String      @default("MONTHLY") // MONTHLY | YEARLY | ONE_TIME
+  price       Decimal     @default(0) @db.Decimal(14, 2)
+  description String?
+  is_active   Boolean     @default(true)
+  sort        Int         @default(100)
+  created_at  DateTime    @default(now())
+  lead_addons LeadAddon[]
+}
+
+/// Add-on yang dipasang pada lead (per lead, bukan per produk). Harga/periode bisa disesuaikan dari katalog.
+model LeadAddon {
+  id             String   @id @default(uuid())
+  lead_id        String
+  addon_id       String
+  quantity       Int      @default(1)
+  price          Decimal  @db.Decimal(14, 2) // harga per unit per periode tagih
+  billing        String   @default("MONTHLY") // MONTHLY | YEARLY | ONE_TIME
+  periods        Int      @default(12) // jumlah periode yang ditagih (bulan / tahun); 1 untuk one-time
+  client_managed Boolean  @default(false) // disediakan client sendiri: dicatat, tidak ditagih
+  product_id     String? // null = berlaku untuk semua produk lead; diisi = hanya produk itu
+  lead           Lead     @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+  addon          Addon    @relation(fields: [addon_id], references: [id])
+
+  @@unique([lead_id, addon_id])
+  @@index([addon_id])
+}
+
+/// Layanan berjalan dari add-on berbayar (server/hosting, domain, SSL, maintenance), dibuat saat Closed Won.
+/// Masa aktif (active_until) maju mengikuti bill yang lunas, sehingga layanan yang hampir/sudah mati bisa dilacak.
+model Service {
+  id           String    @id @default(uuid())
+  client_id    String
+  lead_id      String
+  project_id   String?
+  product_id   String?
+  name         String // nama add-on saat dibuat
+  kind         String    @default("HOSTING") // HOSTING | DOMAIN | SSL | MAINTENANCE | OTHER
+  billing      String    @default("MONTHLY") // MONTHLY | YEARLY | ONE_TIME
+  periods      Int       @default(1)
+  amount       Decimal   @default(0) @db.Decimal(14, 2) // per periode (harga × qty)
+  active_until DateTime? // akhir periode terbayar terakhir; null = belum ada pembayaran / sekali bayar
+  paid_periods Int       @default(0)
+  notes        String?
+  provider     String? // beli/sewa di mana (vendor hosting, registrar domain, penerbit SSL)
+  domain_name  String? // nama domain (domain / SSL / hostname server)
+  server_ip    String?
+  server_port  Int?
+  server_user  String?
+  secret_enc   String? // password server, terenkripsi (AES-256-GCM); tidak pernah dikirim ke browser kecuali lewat aksi "tampilkan"
+  created_at   DateTime  @default(now())
+  client       Client    @relation(fields: [client_id], references: [id])
+  lead         Lead      @relation(fields: [lead_id], references: [id])
+  bills        Bill[]
+
+  @@index([client_id])
+  @@index([lead_id])
+  @@index([active_until])
 }

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { Breadcrumb, PageHeader } from "@/components/ui";
+import ChatterSection from "@/components/ChatterSection";
 import ChangePasswordMenu from "@/components/ChangePasswordMenu";
 import Section from "@/components/Section";
 import Select from "@/components/Select";
@@ -36,6 +37,7 @@ export default async function UserDetail({ params }: { params: Promise<{ id: str
             </div>
           </Section>
         </RecordForm>
+        <ChatterSection type="user" id={u.id} label={u.name} />
       </div>
     </RecordProvider>
   );

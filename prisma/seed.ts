@@ -33,6 +33,17 @@ async function main() {
     await prisma.activityType.upsert({ where: { name: t.name }, update: {}, create: { name: t.name, icon: t.icon, sort: i, needs_location: !!t.needs_location } });
   }
 
+  // Master Add-on contoh (idempoten, tidak menimpa perubahan Super Admin)
+  const addons: [string, string, string, number, string][] = [
+    ["Cloud Hosting Standard", "HOSTING", "MONTHLY", 500000, "2 vCPU, 4 GB RAM, 80 GB SSD"],
+    ["Domain .com", "DOMAIN", "YEARLY", 200000, "Registrasi & perpanjangan domain"],
+    ["SSL Certificate", "SSL", "YEARLY", 350000, "Sertifikat SSL untuk 1 domain"],
+    ["Maintenance & Support", "MAINTENANCE", "MONTHLY", 1500000, "Pemantauan, backup, dan dukungan teknis"],
+  ];
+  for (const [i, [name, kind, billing, price, description]] of addons.entries()) {
+    await prisma.addon.upsert({ where: { name }, update: {}, create: { name, kind, billing, price, description, sort: (i + 1) * 10 } });
+  }
+
   if ((await prisma.lead.count()) > 0) {
     await backfillActivities();
     return console.log("Seed: data lead sudah ada, dilewati.");

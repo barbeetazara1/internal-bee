@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Printer } from "lucide-react";
 import { RecordBar, RecordForm, RecordProvider } from "@/components/Record";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -13,6 +14,7 @@ import Select from "@/components/Select";
 import ClientPicker from "@/components/ClientPicker";
 import PhoneInput from "@/components/PhoneInput";
 import LeadLines from "@/components/LeadLines";
+import LeadAddons from "@/components/LeadAddons";
 import Section from "@/components/Section";
 import LeadStatusProgress, { type Step } from "@/components/LeadStatusProgress";
 import { fmtDate } from "@/lib/format";
@@ -30,16 +32,17 @@ export default async function LeadDetail({ params, searchParams }: { params: Pro
   const sp = await searchParams;
   const lead = await prisma.lead.findUnique({ relationLoadStrategy: "join",
     where: { id },
-    include: { owner: true, sales_persons: { select: { id: true, name: true } }, products: { include: { product: true }, orderBy: { product: { code: "asc" } } }, client: true, project: true, _count: { select: { bills: true } } },
+    include: { owner: true, addons: true, sales_persons: { select: { id: true, name: true } }, products: { include: { product: true }, orderBy: { product: { code: "asc" } } }, client: true, project: true, _count: { select: { bills: true } } },
   });
   if (!lead) notFound();
-  const [activities, actTypes, salesUsers, events, clients, products] = await Promise.all([
+  const [activities, actTypes, salesUsers, events, clients, products, addonCatalog] = await Promise.all([
     prisma.leadActivity.findMany({ where: { lead_id: id }, include: { type: true, created_by: { select: { name: true } }, sales_persons: { select: { id: true, name: true } } }, orderBy: { scheduled_at: "asc" } }),
     prisma.activityType.findMany({ where: { is_active: true }, orderBy: [{ sort: "asc" }, { name: "asc" }] }),
     prisma.user.findMany({ where: { is_active: true, role: { in: SALES_ROLES } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.activity.findMany({ where: { record_type: "lead", record_id: id, kind: "EVENT", body: { startsWith: "Status changed" } }, orderBy: { created_at: "asc" } }),
     prisma.client.findMany({ orderBy: { name: "asc" } }),
     prisma.product.findMany({ where: { is_active: true }, orderBy: { code: "asc" } }),
+    prisma.addon.findMany({ orderBy: [{ sort: "asc" }, { name: "asc" }] }),
   ]);
   const byLabel = Object.fromEntries(Object.entries(LEAD_LABEL).map(([k, v]) => [v, k]));
   const reachedAt: Record<string, Date> = { NEW: lead.created_at };
@@ -104,6 +107,9 @@ export default async function LeadDetail({ params, searchParams }: { params: Pro
                   </ConfirmButton>
                 </form>
               )}
+              {lead.status === "PROPOSAL" && (
+                <Link href={`/leads/${lead.id}/proposal`} className="btn"><Printer size={15} /> Print Proposal</Link>
+              )}
               {lead.status === "NEGOTIATION" && (
                 <PaymentDialog
                   leadId={lead.id}
@@ -114,7 +120,7 @@ export default async function LeadDetail({ params, searchParams }: { params: Pro
                   triggerDisabled={openActs > 0}
                   triggerTitle={openActs > 0 ? `Selesaikan ${openActs} activity di tahap ini dulu` : undefined}
                   title="Tutup sebagai Closed Won?"
-                  intro="Atur sistem pembayarannya. Setelah ditutup, sistem otomatis membuat Project beserta task board, API Key untuk tiap produk, dan Bills sesuai pilihan di bawah. Lead tidak bisa dikembalikan ke status sebelumnya."
+                  intro={`Atur sistem pembayarannya. Setelah ditutup, sistem otomatis membuat Project beserta task board, API Key untuk tiap produk, dan Bills sesuai pilihan di bawah.${lead.addons.some((a) => !a.client_managed) ? " Add-on yang berbayar ikut ditagih otomatis sesuai periodenya." : ""} Lead tidak bisa dikembalikan ke status sebelumnya.`}
                   confirmLabel="Ya, Closed Won"
                 />
               )}
@@ -153,7 +159,7 @@ export default async function LeadDetail({ params, searchParams }: { params: Pro
       )}
 
       <RecordForm action={updateLead} locked={detailLocked} className="fields-compact">
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
         <Section title="Detail Lead" subtitle="Peluang, prioritas, dan sumbernya">
           <input type="hidden" name="id" value={lead.id} />
           <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
@@ -190,6 +196,15 @@ export default async function LeadDetail({ params, searchParams }: { params: Pro
           products={productOptions}
         />
       </div>
+        <div className="mt-6">
+          <LeadAddons
+            key={lead.addons.map((a) => `${a.id}:${a.price}:${a.billing}:${a.periods}:${a.quantity}:${a.client_managed}:${a.product_id}:${a.addon_id}`).join("|")}
+            locked={productsLocked}
+            initial={lead.addons.map((a) => ({ id: a.id, addon_id: a.addon_id, price: Number(a.price), billing: a.billing, periods: a.periods, quantity: a.quantity, client_managed: a.client_managed, product_id: a.product_id }))}
+            addons={addonCatalog.filter((a) => a.is_active || lead.addons.some((l) => l.addon_id === a.id)).map((a) => ({ value: a.id, label: a.is_active ? a.name : `${a.name} (nonaktif)`, price: Number(a.price), billing: a.billing }))}
+            products={lead.products.map((lp) => ({ value: lp.product_id, label: lp.product.code }))}
+          />
+        </div>
       <LeadActivities
         leadId={lead.id}
         currentStage={lead.status}

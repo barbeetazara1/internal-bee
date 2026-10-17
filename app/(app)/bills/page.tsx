@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { can, requireRole } from "@/lib/auth";
-import { Breadcrumb, PageHeader, StatusBadge, SummaryCards } from "@/components/ui";
+import { Alert, Breadcrumb, PageHeader, StatusBadge, SummaryCards } from "@/components/ui";
 import DataTable, { type Col, type Row } from "@/components/DataTable";
 import { BILL_LABEL, effectiveBillStatus } from "@/lib/constants";
 import { BILL_KIND_LABEL } from "@/lib/payment";
-import { fmtDate, idr } from "@/lib/format";
+import { fmtDate, idr, jktDay } from "@/lib/format";
 import { deleteBills } from "@/app/actions/bills";
 
 export default async function BillsPage({ searchParams }: { searchParams: Promise<{ project?: string }> }) {
@@ -14,6 +14,17 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
   const project = projectId ? await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, name: true } }) : null;
   const bills = await prisma.bill.findMany({ relationLoadStrategy: "join", where: project ? { project_id: project.id } : undefined, orderBy: [{ due_date: "asc" }, { code: "asc" }], include: { client: true, product: true } });
   const eff = (b: (typeof bills)[number]) => effectiveBillStatus(b);
+
+  // Di dalam project: kelompokkan per tanggal jatuh tempo (satu periode tagihan); nomor periode ikut ditampilkan bila seragam
+  const periodsOn = new Map<string, Set<number>>();
+  for (const b of bills) {
+    const k = jktDay(b.due_date);
+    periodsOn.set(k, (periodsOn.get(k) ?? new Set()).add(b.period_no));
+  }
+  const periodGroup = (b: (typeof bills)[number]) => {
+    const nos = periodsOn.get(jktDay(b.due_date))!;
+    return `Jatuh tempo ${fmtDate(b.due_date)}${nos.size === 1 ? ` · Periode ${[...nos][0]}` : ""}`;
+  };
 
   const columns: Col[] = [
     { key: "bill", label: "Bill" },
@@ -28,11 +39,11 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
   const rows: Row[] = bills.map((b) => ({
     id: b.id,
     href: project ? `/bills/${b.id}?project=${project.id}` : `/bills/${b.id}`,
-    group: b.client.name,
+    group: project ? periodGroup(b) : b.client.name,
     cells: {
       bill: { text: b.code, node: <span className="font-mono text-xs font-medium">{b.code}</span> },
       client: { text: b.client.name },
-      product: { text: `${b.product.code} ${b.product.name}`, node: <div><div className="font-medium">{b.product.name}</div><div className="font-mono text-xs text-slate-500">{b.product.code}</div></div> },
+      product: { text: `${b.addon_name ?? ""} ${b.product.code} ${b.product.name}`, node: <div><div className="font-medium">{b.addon_name ? `Add-on: ${b.addon_name}` : b.product.name}</div><div className="font-mono text-xs text-slate-500">{b.addon_name ? b.product.name : b.product.code}</div></div> },
       scheme: { text: BILL_KIND_LABEL[b.kind] ?? b.kind },
       period: { text: `${b.period_no} / ${b.period_total}` },
       amount: { text: idr(Number(b.amount)), node: <span className="font-medium">{idr(Number(b.amount))}</span> },
@@ -43,6 +54,7 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
 
   const open = bills.filter((b) => b.status === "UNPAID");
   const overdue = bills.filter((b) => eff(b) === "OVERDUE");
+  const svcRisk = overdue.filter((b) => b.service_id).length; // tagihan layanan (hosting/domain/SSL) terlambat → layanan berisiko terhenti
   const paid = bills.filter((b) => b.status === "PAID");
   const sum = (l: typeof bills) => l.reduce((a, b) => a + Number(b.amount), 0);
   return (
@@ -56,6 +68,7 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
           <Link href="/bills" className="ml-auto btn btn-sm">Tampilkan semua</Link>
         </div>
       )}
+      {svcRisk > 0 && <Alert>{`${svcRisk} tagihan layanan (hosting/domain/SSL) terlambat — layanan terkait berisiko terhenti.`} <Link href="/services" className="font-semibold underline">Lihat Services</Link></Alert>}
       <SummaryCards
         items={[
           { label: "Belum Dibayar", value: idr(sum(open)), hint: `${open.length} bill` },
@@ -63,7 +76,7 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
           { label: "Lunas", value: idr(sum(paid)), hint: `${paid.length} bill` },
         ]}
       />
-      <DataTable columns={columns} rows={rows} groupLabel="Client" exportName="bills" searchPlaceholder="Cari bill, client, produk, status…" emptyText="Belum ada bill. Bill terbentuk otomatis saat sebuah lead ditutup sebagai Closed Won."
+      <DataTable columns={columns} rows={rows} groupLabel={project ? "Periode" : "Client"} exportName="bills" searchPlaceholder="Cari bill, client, produk, status…" emptyText="Belum ada bill. Bill terbentuk otomatis saat sebuah lead ditutup sebagai Closed Won."
         actions={can.admin(user.role) ? [{ label: "Delete", run: deleteBills, danger: true, confirm: "Delete {n} selected record(s)? This can't be undone." }] : []}
       />
     </div>

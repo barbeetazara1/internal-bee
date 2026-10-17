@@ -5,7 +5,7 @@ import { addDays, addMonths } from "./format";
 import { generateKey, type Env } from "./keys";
 import type { RevealedKey } from "./flash";
 import { logActivity } from "./activity";
-import { checkPlans, createBillsForLead } from "./billing";
+import { checkPlans, createAddonBillsForLead, createBillsForLead } from "./billing";
 import { LEAD_LABEL } from "./constants";
 import type { PaymentPlan } from "./payment";
 
@@ -24,7 +24,7 @@ const TASK_TEMPLATE = [
  *  4. membuat Bills sesuai sistem pembayaran yang dipilih user per produk.
  */
 export async function closeLeadAsWon(leadId: string, userId: string, plans: Record<string, PaymentPlan>) {
-  const lead = await prisma.lead.findUnique({ relationLoadStrategy: "join", where: { id: leadId }, include: { client: true, products: { include: { product: true } } } });
+  const lead = await prisma.lead.findUnique({ relationLoadStrategy: "join", where: { id: leadId }, include: { client: true, products: { include: { product: true } }, addons: { include: { addon: true } } } });
   if (!lead) throw new Error("Lead tidak ditemukan");
   if (lead.status === "CLOSED_WON") throw new Error("Lead sudah Closed Won");
   if (lead.status === "CLOSED_LOST") throw new Error("Lead yang sudah Closed Lost tidak bisa dibuka kembali");
@@ -39,6 +39,7 @@ export async function closeLeadAsWon(leadId: string, userId: string, plans: Reco
   const now = new Date();
   const revealed: RevealedKey[] = [];
   const licenseIds: string[] = [];
+  let projectId: string | null = null;
 
   const client = lead.client; // Client dipilih user pada lead (many2one), tidak lagi dibuat otomatis
   const clientId = await prisma.$transaction(async (tx) => {
@@ -55,6 +56,7 @@ export async function closeLeadAsWon(leadId: string, userId: string, plans: Reco
         end_date: addMonths(now, maxMonths),
       },
     });
+    projectId = project.id;
 
     // Task board: id dibuat di muka lalu dimasukkan sekaligus (createMany) — di serverless setiap query ke DB cloud memakan
     // waktu, dan puluhan query berurutan dalam satu transaksi bisa melewati batas waktunya.
@@ -106,14 +108,16 @@ export async function closeLeadAsWon(leadId: string, userId: string, plans: Reco
     // 3. Bills sesuai skema tagihan tiap produk
     const bills = await createBillsForLead(tx, { leadId: lead.id, leadTitle: lead.title, clientId: client.id, projectId: project.id, lines: lead.products, plans, licenseIds, start: now, authorId: userId });
 
+    const addonBills = await createAddonBillsForLead(tx, { leadId: lead.id, leadTitle: lead.title, clientId: client.id, projectId: project.id, productIds: lead.products.map((lp) => lp.product_id), addons: lead.addons, start: now, authorId: userId });
+
     await tx.lead.update({ where: { id: lead.id }, data: { status: "CLOSED_WON", closed_at: now } });
 
     // Riwayat: lead, client, dan project hasil otomatisasi
-    await logActivity(tx, { type: "lead", id: lead.id, kind: "EVENT", authorId: userId, label: lead.title, body: `Status changed to Closed Won — project, ${lead.products.length} API key(s) and ${bills} bill(s) were created automatically for ${client.name}` });
+    await logActivity(tx, { type: "lead", id: lead.id, kind: "EVENT", authorId: userId, label: lead.title, body: `Status changed to Closed Won — project, ${lead.products.length} API key(s) and ${bills + addonBills} bill(s) were created automatically for ${client.name}` });
     await logActivity(tx, { type: "client", id: client.id, kind: "EVENT", authorId: userId, label: client.name, body: `Lead "${lead.title}" closed as Won — project and ${lead.products.length} license(s) created` });
     await logActivity(tx, { type: "project", id: project.id, kind: "CREATED", authorId: userId, label: project.name, body: `Created automatically with ${tasks.length} tasks when lead "${lead.title}" was closed as Won` });
     return client.id;
   }, { maxWait: 15000, timeout: 60000 }); // batas default Prisma (5 dtk) terlalu pendek untuk DB cloud
 
-  return { clientId, revealed, licenseIds };
+  return { clientId, revealed, licenseIds, projectId };
 }

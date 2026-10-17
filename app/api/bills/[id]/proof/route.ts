@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { can, getUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { BILL_LABEL } from "@/lib/constants";
+import { createNextBill } from "@/lib/billing";
+import { refreshService } from "@/lib/services";
 import { PROOF_MAX_BYTES, readProof, removeProof, saveProof, sniff } from "@/lib/proof";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -34,8 +36,14 @@ export async function POST(req: Request, { params }: Ctx) {
     throw e;
   }
   await logActivity(prisma, { type: "bill", id, kind: "EVENT", authorId: user.id, label: bill.code, body: `Status changed: ${BILL_LABEL.UNPAID} → ${BILL_LABEL.PAID} (proof: ${name})` });
+  // Bill berjenjang: setelah lunas, bill periode berikutnya baru dibuat (satu per satu); masa aktif layanan ikut maju
+  await prisma.$transaction(async (tx) => {
+    await createNextBill(tx, id, user.id);
+    await refreshService(tx, bill.service_id);
+  }, { maxWait: 15000, timeout: 30000 });
   revalidatePath(`/bills/${id}`);
   revalidatePath("/bills");
+  revalidatePath("/services");
   return NextResponse.json({ ok: true, message: "Bill marked as paid" });
 }
 

@@ -31,7 +31,7 @@ export function PageHeader({ title, subtitle, children }: { title: string; subti
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
       </div>
       <div className="flex items-center gap-2">{children}</div>
@@ -48,7 +48,7 @@ export function Stat({ label, value, hint }: { label: string; value: React.React
   return (
     <div className="card p-4">
       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 break-words text-xl font-semibold text-slate-900 xl:text-2xl">{value}</div>
+      <div className="mt-1 break-words text-xl font-bold tabular-nums text-slate-900 xl:text-2xl 2xl:text-3xl">{value}</div>
       {hint && <div className="mt-0.5 text-xs text-slate-400">{hint}</div>}
     </div>
   );
@@ -102,8 +102,8 @@ export function SummaryCards({ items }: { items: { label: string; value: React.R
 }
 
 /** Tombol pintas (smart button) di form record: angka ringkas + label yang menuju daftar record terkait. */
-export function SmartButton({ href, icon: Icon, value, label, hint, tone = "slate" }: { href: string; icon: LucideIcon; value: React.ReactNode; label: string; hint?: string; tone?: "slate" | "red" | "green" }) {
-  const iconCls = tone === "red" ? "bg-red-50 text-red-600" : tone === "green" ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500";
+export function SmartButton({ href, icon: Icon, value, label, hint, tone = "slate" }: { href: string; icon: LucideIcon; value: React.ReactNode; label: string; hint?: string; tone?: "slate" | "red" | "green" | "amber" }) {
+  const iconCls = tone === "red" ? "bg-red-50 text-red-600" : tone === "amber" ? "bg-amber-50 text-amber-600" : tone === "green" ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500";
   return (
     <Link href={href} className="card flex min-w-44 items-center gap-3 px-4 py-2.5 transition hover:border-amber-400 hover:shadow-md">
       <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconCls}`}><Icon size={20} /></span>

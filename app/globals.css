@@ -18,6 +18,7 @@
 
 @layer base {
   body { @apply bg-slate-50 text-base text-slate-800 antialiased; }
+  h1, h2 { text-wrap: balance; }
 }
 
 @layer components {
@@ -94,3 +95,41 @@ html[data-sb="collapsed"] .app-sidebar .sb-head { justify-content: center; paddi
 .sb-toggle { opacity: 0; transition: opacity 0.15s ease; }
 .app-sidebar:hover .sb-toggle, .sb-toggle:focus-visible { opacity: 1; }
 @media (hover: none) { .sb-toggle { opacity: 1; } }
+
+/*
+ * Gerak (Emil utama, Jakub kedua): aplikasi ini dipakai ratusan kali sehari, jadi perpindahan halaman, daftar,
+ * dan kalender TIDAK dianimasikan. Gerak hanya untuk hal yang muncul sesekali (dialog, menu/popover, toast, ganti skala kalender):
+ * cepat (≤200ms), kurva ease-out kuat, tanpa pantulan, dan selalu mengalah pada prefers-reduced-motion.
+ * Properti individual `translate`/`scale` dipakai (bukan `transform`) supaya tidak menimpa posisi yang sudah memakai transform.
+ */
+:root { --ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes pop-in { from { opacity: 0; translate: 0 8px; scale: .98; } }
+@keyframes menu-in { from { opacity: 0; translate: 0 -4px; scale: .97; } }
+@keyframes toast-in { from { opacity: 0; translate: 12px 0; } }
+@media (prefers-reduced-motion: no-preference) {
+  [role="dialog"], [role="alertdialog"] { animation: pop-in .2s var(--ease-out) both; }
+  div:has(> [role="dialog"]), div:has(> [role="alertdialog"]) { animation: fade-in .15s ease-out both; }
+  [role="listbox"], [role="menu"] { animation: menu-in .14s var(--ease-out) both; transform-origin: top; }
+  [role="status"] { animation: toast-in .22s var(--ease-out) both; }
+  .view-in { animation: fade-in .16s ease-out both; }
+}
+/* Umpan balik tekan: instan, tanpa durasi panjang */
+.btn:active:not(:disabled) { transform: scale(0.97); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+/* Baris tabel: sorot halus saat dihover */
+tbody tr { transition: background-color .12s ease; }
+/* Cincin fokus keyboard hanya untuk tombol & tautan; kolom isian sudah punya gaya fokus sendiri */
+button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible { outline: 2px solid rgb(245 158 11); outline-offset: 2px; }
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline: none; }
+
+/* Dokumen cetak (proposal): selalu memakai palet terang, walau aplikasi sedang di mode gelap */
+.doc-light {
+  color-scheme: light;
+  --surface: 255 255 255;
+  --slate-50: 248 250 252; --slate-100: 241 245 249; --slate-200: 226 232 240; --slate-300: 203 213 225;
+  --slate-400: 148 163 184; --slate-500: 100 116 139; --slate-600: 71 85 105; --slate-700: 51 65 85;
+  --slate-800: 30 41 59; --slate-900: 15 23 42; --slate-950: 2 6 23;
+}

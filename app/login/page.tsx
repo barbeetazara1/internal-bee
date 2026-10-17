@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import PasswordInput from "@/components/PasswordInput";
 import { loginAction } from "@/app/actions/auth";
 
 export default function LoginPage() {
@@ -21,7 +22,7 @@ export default function LoginPage() {
           </div>
           <div>
             <label className="label">Password</label>
-            <input name="password" type="password" required className="input" />
+            <PasswordInput name="password" required autoComplete="current-password" />
           </div>
           <button disabled={pending} className="btn btn-primary w-full">
             {pending ? "Masuk…" : "Masuk"}

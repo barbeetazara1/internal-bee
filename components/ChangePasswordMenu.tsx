@@ -1,5 +1,6 @@
 "use client";
 
+import PasswordInput from "./PasswordInput";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { KeyRound, X } from "lucide-react";
@@ -65,9 +66,9 @@ export default function ChangePasswordMenu({ userId, userName }: { userId: strin
             </div>
             <form ref={formRef} onSubmit={submit} className="space-y-3">
               {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
-              <div><label className="label">Password lama<span className="text-red-500"> *</span></label><input ref={oldRef} name="old" type="password" required autoComplete="current-password" className="input" /></div>
-              <div><label className="label">Password baru<span className="text-red-500"> *</span> <span className="font-normal text-slate-400">(min. 8 karakter)</span></label><input name="new" type="password" required minLength={8} autoComplete="new-password" className="input" /></div>
-              <div><label className="label">Konfirmasi password baru<span className="text-red-500"> *</span></label><input name="confirm" type="password" required minLength={8} autoComplete="new-password" className="input" /></div>
+              <div><label className="label">Password lama<span className="text-red-500"> *</span></label><PasswordInput ref={oldRef} name="old" required autoComplete="current-password" /></div>
+              <div><label className="label">Password baru<span className="text-red-500"> *</span> <span className="font-normal text-slate-400">(min. 8 karakter)</span></label><PasswordInput name="new" required minLength={8} autoComplete="new-password" /></div>
+              <div><label className="label">Konfirmasi password baru<span className="text-red-500"> *</span></label><PasswordInput name="confirm" required minLength={8} autoComplete="new-password" /></div>
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" className="btn" onClick={() => setOpen(false)} disabled={pending}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? "Saving…" : "Change Password"}</button>

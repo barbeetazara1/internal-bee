@@ -1,4 +1,5 @@
 import "./globals.css";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import type { Metadata } from "next";
 import ConfirmHost from "@/components/ConfirmHost";
 import { cookies } from "next/headers";
@@ -6,6 +7,9 @@ import { LANG_COOKIE } from "@/lib/lang";
 import I18nProvider from "@/components/I18nProvider";
 import type { Lang } from "@/lib/lang";
 import Toaster from "@/components/Toaster";
+
+// Tipografi: satu keluarga huruf untuk seluruh aplikasi (Plus Jakarta Sans), tanpa huruf serif/monospace terpisah
+const font = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-body", display: "swap" });
 
 export const metadata: Metadata = { title: "Internal Bee", description: "Portal operasional internal & manajemen lisensi" };
 
@@ -15,7 +19,7 @@ const themeScript = `if(/(^|; )ib_lang=en/.test(document.cookie)){document.docum
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const lang: Lang = (await cookies()).get(LANG_COOKIE)?.value === "en" ? "en" : "id";
   return (
-    <html lang={lang} suppressHydrationWarning>
+    <html lang={lang} className={`${font.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
